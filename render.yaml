@@ -1,0 +1,19 @@
+# Render Blueprint for Sui Cleaner (free Web Service).
+# Dashboard → New → Blueprint → select this repo. Then set SERVICE_FEE_ADDRESS.
+services:
+  - type: web
+    name: sui-cleaner
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NETWORK
+        value: mainnet
+      - key: SUI_RPC_URL
+        value: https://sui.publicnode.com
+      # REQUIRED for real cleanup (treasury). Set in the Render dashboard —
+      # never commit the real address here.
+      - key: SERVICE_FEE_ADDRESS
+        sync: false
