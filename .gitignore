@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Vite cache
+.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Misc
+*.tgz
+*.tar.gz
+*.zip
+backup/
+backup_*/
+
+# Local verification screenshots at repo root (not product assets;
+# bundled artwork lives in src/assets/ and IS committed)
+/*.png
+
+# Local run artifacts (headless screenshots, verify output)
+/artifacts/
+
+# Local design-review screenshot dumps (not product assets)
+# Bundled artwork lives in src/assets/ and IS committed.
+/desing_all_0.1.9.26/
+
+# AI-artwork source variants (duplicates of src/assets/ input)
+/Бэкграунд/
+
+screenshots_site/
