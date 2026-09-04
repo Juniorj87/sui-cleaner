@@ -128,10 +128,10 @@ export default function SiteHeader() {
 
           {/* GitHub Icon */}
           <a
-            href="https://github.com"
+            href="https://github.com/Juniorj87/sui-cleaner"
             target="_blank"
             rel="noopener noreferrer"
-            title="GitHub Repository"
+            title="Sui Cleaner on GitHub"
             style={{
               width: 38,
               height: 38,

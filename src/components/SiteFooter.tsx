@@ -26,7 +26,7 @@ const COLUMNS: { title: string; links: { label: string; to: string; external?: b
     title: "Community",
     links: [
       { label: "X / Twitter (@SuiCleaner)", to: "https://x.com/SuiCleaner", external: true },
-      { label: "GitHub", to: "https://github.com", external: true },
+      { label: "GitHub", to: "https://github.com/Juniorj87/sui-cleaner", external: true },
       { label: "Sui Foundation", to: "https://sui.io", external: true },
       { label: "Suiscan Explorer", to: "https://suiscan.xyz/mainnet", external: true },
     ],
