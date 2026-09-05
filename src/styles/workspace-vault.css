@@ -6240,3 +6240,485 @@
     font-size: 12px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* App home + batch scan — same cards, radius, type, buttons, dark/cyan */
+/* ------------------------------------------------------------------ */
+
+.mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* back strip above single-wallet content (explicit navigation, never history) */
+.ws-back-strip {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.ws-back-btn {
+  background: none;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.ws-back-btn:hover {
+  color: #e8e4dc;
+  border-color: rgba(120, 200, 255, 0.4);
+}
+
+/* --- App home --- */
+.app-home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-home-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.app-home-panel {
+  background: var(--ws-panel);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--ws-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-home-panel-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #38bdf8;
+}
+
+.app-home-connected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-home-addr {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: #e8e4dc;
+}
+
+.app-home-or {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.app-home-scanrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-home-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  background: rgba(18, 18, 24, 0.8);
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  color: #e8e4dc;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+.app-home-input:focus {
+  border-color: rgba(120, 200, 255, 0.5);
+}
+
+.app-home-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: #fb7185;
+}
+
+.app-home-note {
+  margin: 0;
+}
+
+.app-home-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #38bdf8;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.app-home-label {
+  font-size: 11px;
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.app-home-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.app-home-recents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-home-recent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+}
+
+.app-home-recent-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.app-home-recent-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- Batch screens --- */
+.batch-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.batch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.batch-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.batch-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.batch-tab {
+  background: none;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.batch-tab.active {
+  color: #e8e4dc;
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.batch-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: rgba(18, 18, 24, 0.8);
+  border: 1px solid var(--ws-border);
+  border-radius: 12px;
+  color: #e8e4dc;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+}
+
+.batch-textarea:focus {
+  border-color: rgba(120, 200, 255, 0.5);
+}
+
+.batch-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.batch-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batch-preview-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #38bdf8;
+}
+
+.batch-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.batch-stats b {
+  color: #e8e4dc;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.batch-remove-btn {
+  background: none;
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  border-radius: 6px;
+  color: #fda4af;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.batch-remove-btn:hover {
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.batch-progress-track {
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.15);
+  overflow: hidden;
+}
+
+.batch-progress-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #38bdf8, #3df5c5);
+  transition: width 0.2s ease;
+}
+
+.batch-summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 14px 18px;
+  background: rgba(14, 14, 18, 0.6);
+  border: 1px solid rgba(242, 237, 228, 0.08);
+  border-radius: 16px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.batch-summary b {
+  color: #e8e4dc;
+}
+
+.batch-summary-note {
+  width: 100%;
+  font-size: 12px;
+  color: #fbbf24;
+}
+
+.batch-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batch-sort,
+.batch-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.batch-controls-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #64748b;
+}
+
+.batch-chip {
+  background: none;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.batch-chip.active {
+  color: #e8e4dc;
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.batch-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-card {
+  background: var(--ws-panel);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--ws-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.batch-card-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #64748b;
+}
+
+.batch-card-addr {
+  font-size: 14px;
+  color: #e8e4dc;
+}
+
+.batch-status {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.batch-status.ready {
+  color: #3df5c5;
+  border-color: rgba(61, 245, 197, 0.35);
+}
+
+.batch-status.failed {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.35);
+}
+
+.batch-card-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.batch-card-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.batch-card-grid b {
+  font-size: 16px;
+  color: #e8e4dc;
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-card-rebate b {
+  color: #3df5c5;
+}
+
+.batch-card-unavailable {
+  color: #64748b !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.batch-card-source {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  padding-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .app-home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .batch-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -26,6 +26,13 @@ import CleanupScreen from "../components/CleanupScreen";
 import FinalReviewScreen from "../components/FinalReviewScreen";
 import SignScreen, { type SignBlocker } from "../components/SignScreen";
 import SuccessScreen from "../components/SuccessScreen";
+import AppHome from "../components/batch/AppHome";
+import BatchInput from "../components/batch/BatchInput";
+import BatchProgress from "../components/batch/BatchProgress";
+import BatchResults from "../components/batch/BatchResults";
+import { runBatchScan, type BatchProgress as BatchProgressState, type BatchWalletResult } from "../batch/batchScanner";
+import { addRecent, createSession, loadRecents, resolveBackTarget, type RecentScan, type ScanSession } from "../batch/sessions";
+import { estimateWalletRebate } from "../batch/rebateEstimate";
 import { planCleanup, type CleanupPlan } from "../cleanup/cleanupEngine";
 import { verifyPostTransaction, type VerificationResult } from "../cleanup/postTxVerifier";
 import { treasuryDisplay } from "../fees/treasury";
@@ -78,7 +85,7 @@ interface TxResult {
 }
 
 /** screens where the left nav is visible but non-interactive */
-const NAV_GHOSTED = new Set(["analyzing", "sign", "success", "cancelled", "failed"]);
+const NAV_GHOSTED = new Set(["analyzing", "sign", "success", "cancelled", "failed", "home", "batch", "batch-progress", "batch-results"]);
 
 /**
  * The product at /app — ONE persistent workspace:
@@ -116,6 +123,32 @@ export default function AppPage() {
   const [showAISetup, setShowAISetup] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [aiFocusObject, setAiFocusObject] = useState<WalletObject | null>(null);
+  // ---------- wallet sessions, batch runs, recents (batch-analysis layer) ----------
+  /** current single-wallet session: address bound to THIS scan result */
+  const [session, setSession] = useState<ScanSession | null>(null);
+  /** where BACK returns from a single-wallet view opened out of batch results */
+  const [returnTo, setReturnTo] = useState<"batch" | null>(null);
+  const [recents, setRecents] = useState<RecentScan[]>(() => loadRecents());
+  const [focusInputSignal, setFocusInputSignal] = useState(0);
+  const [batchDraft, setBatchDraft] = useState<{ text: string; upload: Array<{ address: string; label?: string }> }>({ text: "", upload: [] });
+  const [batchProgress, setBatchProgress] = useState<BatchProgressState>({ total: 0, done: 0, ok: 0, failed: 0, remaining: 0 });
+  const [batchResults, setBatchResults] = useState<BatchWalletResult[] | null>(null);
+  const batchCancelledRef = useRef(false);
+  /** in-memory scan cache by normalized address (OPEN without re-scan) */
+  const sessionCache = useRef(new Map<string, ScanResult>());
+  /** bounded batch object cache (VIEW WALLET without a second RPC scan) */
+  const batchObjectCache = useRef(new Map<string, ScanResult>());
+  const cacheBatchObjects = (address: string, scan: ScanResult) => {
+    const key = address.toLowerCase();
+    const map = batchObjectCache.current;
+    map.delete(key);
+    map.set(key, scan);
+    while (map.size > 25) {
+      const oldest = map.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      map.delete(oldest);
+    }
+  };
 
   const openAIAssistant = useCallback((obj?: WalletObject) => {
     setAiFocusObject(obj ?? null);
@@ -304,6 +337,9 @@ export default function AppPage() {
     setShowMismatch(false);
     setPlan(null);
     setTxResult(null);
+    setReturnTo(null);
+    setSession(null);
+    flow.clearSelection();
     setNavCategory("all");
     setSignPhase("ready");
     flow.go("analyzing");
@@ -315,6 +351,42 @@ export default function AppPage() {
     }, 1500);
   };
 
+  /** recent-scan metadata for one completed real scan */
+  const buildRecent = (address: string, r: ScanResult): RecentScan => {
+    const norm = normalizeAddress(address);
+    let safe = 0;
+    let review = 0;
+    let keep = 0;
+    let rebate = 0;
+    for (const o of r.objects) {
+      switch (o.classification) {
+        case "cleanable": safe += 1; break;
+        case "review":
+        case "suspicious": review += 1; break;
+        default: keep += 1; break;
+      }
+      rebate += storageRebateSui(o);
+    }
+    return {
+      address: norm,
+      label: "—",
+      scannedAt: Date.now(),
+      total: r.objects.length,
+      safe,
+      review,
+      keep,
+      rebate: Math.round(rebate * 10000) / 10000,
+    };
+  };
+
+  /** record a completed real scan as an isolated session + recent entry */
+  const recordSession = (address: string, r: ScanResult) => {
+    const norm = normalizeAddress(address);
+    setSession(createSession(norm));
+    sessionCache.current.set(norm.toLowerCase(), r);
+    setRecents(addRecent(buildRecent(norm, r)));
+  };
+
   /** read-only scan of an arbitrary public address — via the same-origin proxy */
   const startReadonly = (address: string) => {
     const token = ++scanToken.current;
@@ -324,6 +396,8 @@ export default function AppPage() {
     setShowMismatch(false);
     setPlan(null);
     setTxResult(null);
+    setReturnTo(null);
+    flow.clearSelection();
     setNavCategory("all");
     setSignPhase("ready");
     flow.go("analyzing");
@@ -331,13 +405,14 @@ export default function AppPage() {
       .then((r) => {
         if (token !== scanToken.current) return;
         setScan(r);
+        recordSession(address, r);
         flow.go("report");
       })
       .catch((e: unknown) => {
         if (token !== scanToken.current) return;
         if (e instanceof ScanError) setError(e.code);
         else setError("scan-failed" as ErrorCode);
-        flow.go("start");
+        flow.go("home");
       });
   };
 
@@ -354,6 +429,8 @@ export default function AppPage() {
     setShowMismatch(false);
     setPlan(null);
     setTxResult(null);
+    setReturnTo(null);
+    flow.clearSelection();
     setNavCategory("all");
     setSignPhase("ready");
     flow.go("analyzing");
@@ -361,29 +438,20 @@ export default function AppPage() {
       .then((r) => {
         if (token !== scanToken.current) return;
         setScan(r);
+        recordSession(account.address, r);
         flow.go("report");
       })
       .catch((e: unknown) => {
         if (token !== scanToken.current) return;
         if (e instanceof ScanError) setError(e.code);
         else setError("scan-failed" as ErrorCode);
-        flow.go("start");
+        flow.go("home");
       });
   };
 
-  // Auto-scan on wallet connect — "что бы там подключал кошелек человек и тогда происходила магия"
-  const autoScannedAddress = useRef<string | null>(null);
-  useEffect(() => {
-    if (account?.address && mode !== "demo" && mode !== "readonly") {
-      if (autoScannedAddress.current !== account.address && (flow.screen === "start" || !scan)) {
-        autoScannedAddress.current = account.address;
-        startReal();
-      }
-    }
-    if (!account?.address) {
-      autoScannedAddress.current = null;
-    }
-  }, [account?.address, flow.screen, scan, mode]);
+  // No auto-scan anywhere: every scan is an explicit user action (button,
+  // OPEN, RESCAN, deep link). Returning to the App Home never re-scans —
+  // the previous auto-scan-on-connect effect was removed for this reason.
 
   const resetApp = () => {
     ++scanToken.current;
@@ -399,18 +467,111 @@ export default function AppPage() {
     setCleaned(false);
     setShowMismatch(false);
     setTxResult(null);
+    setReturnTo(null);
+    setSession(null);
+    setBatchResults(null);
     setNavCategory("all");
     setSignPhase("ready");
   };
 
-  /** main CTA — re-run the current scan, or drop to the start screen */
+  /** main CTA — re-run the current scan, or drop to the App Home */
   const handleScan = () => {
     if (mode === "demo") return startDemo();
     if (mode === "readonly" && scannedAddress) return startReadonly(scannedAddress);
     if (account) return startReal();
-    flow.go("start");
+    flow.go("home");
     setFocusInput(true);
   };
+
+  /** NEW SCAN / NEW WALLET — end the current session, open the picker, scan nothing */
+  const newScan = () => {
+    ++scanToken.current;
+    setReturnTo(null);
+    setSession(null);
+    setFocusInputSignal((n) => n + 1);
+    flow.go("home");
+  };
+
+  /**
+   * Restore an already-scanned wallet into the single-wallet flow without
+   * any RPC traffic (batch cache or recent cache — data is seconds old).
+   */
+  const restoreScan = (address: string, label: string | undefined, scan: ScanResult, where: "batch" | null) => {
+    const norm = normalizeAddress(address);
+    ++scanToken.current;
+    setMode("readonly");
+    setScannedAddress(norm);
+    setCleaned(false);
+    setShowMismatch(false);
+    setPlan(null);
+    setTxResult(null);
+    setReturnTo(where);
+    flow.clearSelection();
+    setNavCategory("all");
+    setSignPhase("ready");
+    setSession(createSession(norm, label));
+    sessionCache.current.set(norm.toLowerCase(), scan);
+    setRecents(addRecent(buildRecent(norm, scan)));
+    setScan(scan);
+    flow.go("report");
+  };
+
+  /** open one batch wallet in the existing single-wallet flow (explicit) */
+  const openBatchWallet = (address: string) => {
+    const norm = normalizeAddress(address);
+    const cached = batchObjectCache.current.get(norm.toLowerCase());
+    if (cached) {
+      restoreScan(norm, undefined, cached, "batch");
+      return;
+    }
+    setSession(createSession(norm));
+    setReturnTo("batch");
+    startReadonly(norm);
+  };
+
+  /** open a recent scan: cached result restores instantly, else one explicit scan */
+  const openRecent = (rec: RecentScan) => {
+    const cached = sessionCache.current.get(rec.address.toLowerCase());
+    if (cached) {
+      restoreScan(rec.address, rec.label, cached, null);
+      return;
+    }
+    startReadonly(rec.address);
+  };
+
+  /** start a batch run over preview items (labels travel along) */
+  const startBatch = useCallback(async (items: Array<{ address: string; label?: string }>) => {
+    batchCancelledRef.current = false;
+    setBatchProgress({ total: items.length, done: 0, ok: 0, failed: 0, remaining: items.length });
+    setBatchResults(null);
+    flow.go("batch-progress");
+    const results = await runBatchScan(items, scanWalletReadonly, {
+      concurrency: 3,
+      onProgress: (p) => setBatchProgress(p),
+      onWallet: (addr, scan) => cacheBatchObjects(addr, scan),
+      // Same builder + dry-run source as single-wallet review: the batch
+      // figure and the review figure agree for the same object set.
+      estimateFn: (addr, targets) => estimateWalletRebate(client, addr, targets),
+      isCancelled: () => batchCancelledRef.current,
+    });
+    // Cancelled runs keep whatever settled: with results → results screen,
+    // with nothing settled → back to preview (draft intact, never restarted).
+    const anySettled = results.some(
+      (r) => r.status === "ready" || (r.error && r.error !== "Cancelled before scan started.")
+    );
+    if (batchCancelledRef.current && !anySettled) {
+      flow.go("batch");
+      return;
+    }
+    setBatchResults(results);
+    flow.go("batch-results");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cancelBatch = useCallback(() => {
+    batchCancelledRef.current = true;
+    flow.go("batch");
+  }, [flow]);
 
   // ---------- address matching ----------
   const readOnlyMatch =
@@ -882,7 +1043,76 @@ export default function AppPage() {
 
   // ---------- center content: switches per flow state, same workspace ----------
   let center: ReactNode = null;
+  const backStrip =
+    flow.screen === "report" || flow.screen === "explore" ? (
+      <div className="ws-back-strip">
+        {(() => {
+          const target = resolveBackTarget(flow.screen as "report" | "explore", returnTo, !!batchResults);
+          return (
+            <button
+              className="ws-back-btn"
+              data-act={target === "batch-results" ? "back-to-results" : "back-home"}
+              onClick={() => flow.go(target)}
+            >
+              {target === "batch-results" ? "← BACK TO RESULTS" : "← BACK"}
+            </button>
+          );
+        })()}
+      </div>
+    ) : null;
   switch (flow.screen) {
+    case "home":
+      center = (
+        <div className="ws-screen-center">
+          <AppHome
+            connectedAddress={account?.address ?? null}
+            onConnect={connect}
+            onScanConnected={startReal}
+            onScanAddress={(addr) => startReadonly(addr)}
+            onDemo={startDemo}
+            onBatch={() => flow.go("batch")}
+            recents={recents}
+            onOpenRecent={openRecent}
+            onRescanRecent={(rec) => startReadonly(rec.address)}
+            focusInputSignal={focusInputSignal}
+          />
+        </div>
+      );
+      break;
+
+    case "batch":
+      center = (
+        <div className="ws-screen-center">
+          <BatchInput
+            draft={batchDraft}
+            onDraft={setBatchDraft}
+            onStart={startBatch}
+            onBack={() => flow.go("home")}
+          />
+        </div>
+      );
+      break;
+
+    case "batch-progress":
+      center = (
+        <div className="ws-screen-center">
+          <BatchProgress progress={batchProgress} onCancel={cancelBatch} />
+        </div>
+      );
+      break;
+
+    case "batch-results":
+      center = batchResults ? (
+        <div className="ws-screen-center">
+          <BatchResults
+            results={batchResults}
+            onViewWallet={openBatchWallet}
+            onBack={() => flow.go("batch")}
+          />
+        </div>
+      ) : null;
+      break;
+
     case "start":
       center = (
         <CleanerDesk
@@ -1223,6 +1453,7 @@ export default function AppPage() {
                 onKeepViewing={() => setShowMismatch(false)}
               />
             )}
+            {backStrip}
             {center}
           </div>
 

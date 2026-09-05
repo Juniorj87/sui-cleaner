@@ -80,7 +80,7 @@ function humanExplanation(o: WalletObject, st: GroupStatus): {
       return {
         whatIsIt: "Empty 0-Balance Coin Object",
         whyIsItHere: "This coin object previously held tokens, but the entire balance was spent. The empty container still occupies on-chain storage.",
-        whatCanIDo: "RECLAIM SUI — Safe to delete via coin::destroy_zero(). Returns +0.0028 SUI storage rebate directly to your wallet.",
+        whatCanIDo: "RECLAIM SUI — Safe to delete via coin::destroy_zero(). Destroying it may return a storage rebate (estimated — the final amount depends on transaction effects).",
       };
     }
     if (o.dust) {
@@ -243,7 +243,7 @@ export default function InlineDossier({
                   ? "PROTECTED"
                   : st === "cleanable"
                   ? empty
-                    ? "SAFE TO REMOVE (+0.0028 SUI)"
+                    ? "SAFE TO REMOVE (ESTIMATED REBATE)"
                     : isSuspicious
                     ? "SUSPICIOUS / SPAM"
                     : object.category === "nft"
@@ -382,7 +382,7 @@ export default function InlineDossier({
                 </>
               ) : empty ? (
                 <>
-                  <Zap size={13} strokeWidth={2.2} /> RECLAIM +0.0028 SUI (ADD TO CLEANUP)
+                  <Zap size={13} strokeWidth={2.2} /> RECLAIM REBATE (ADD TO CLEANUP)
                 </>
               ) : isSuspicious ? (
                 <>

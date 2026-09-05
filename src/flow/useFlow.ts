@@ -7,6 +7,7 @@ import { useCallback, useState } from "react";
  */
 export type Screen =
   | "start"
+  | "home"
   | "analyzing"
   | "report"
   | "explore"
@@ -17,7 +18,10 @@ export type Screen =
   | "sign"
   | "success"
   | "cancelled"
-  | "failed";
+  | "failed"
+  | "batch"
+  | "batch-progress"
+  | "batch-results";
 
 /** user-facing analysis sequence — the investigation, step by step */
 export const SCAN_STEPS = [
@@ -51,7 +55,8 @@ export interface Flow {
 }
 
 export function useFlow(): Flow {
-  const [screen, setScreen] = useState<Screen>("start");
+  // The /app landing is the App Home — no scan starts by itself.
+  const [screen, setScreen] = useState<Screen>("home");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reviewIndex, setReviewIndex] = useState(0);
 
@@ -102,7 +107,8 @@ export function useFlow(): Flow {
   const reset = useCallback(() => {
     setSelected(new Set());
     setReviewIndex(0);
-    setScreen("start");
+    // Back lands on the App Home — and home never re-scans by itself.
+    setScreen("home");
   }, []);
 
   return {
