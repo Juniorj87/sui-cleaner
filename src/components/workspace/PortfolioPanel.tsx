@@ -6,6 +6,7 @@ import type {
   AssetCategory,
   ProtocolName,
 } from "../../types/portfolio";
+import { formatFloorSui } from "../../types/portfolio";
 
 /* ---------- image proxy helper ---------- */
 function proxyImage(url: string | null | undefined): string {
@@ -121,6 +122,13 @@ function NftCard({ nft }: { nft: NftAsset }) {
         <span className={`portfolio-nft-cat ${nft.category}`}>
           {nft.category === "verified" ? "✓ VERIFIED" : "UNVERIFIED"}
         </span>
+        {nft.floorPriceKnown && typeof nft.floorPriceSui === "number" ? (
+          <span className="portfolio-nft-floor" title="Collection floor price via Blockberry">
+            Floor {formatFloorSui(nft.floorPriceSui)} SUI
+          </span>
+        ) : (
+          <span className="portfolio-nft-floor unknown">Floor —</span>
+        )}
       </div>
     </div>
   );

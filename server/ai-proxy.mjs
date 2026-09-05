@@ -1343,6 +1343,45 @@ async function callBlockberryNfts(address) {
 }
 
 /**
+ * Normalize a Blockberry NFT floor price to SUI, or null when unknown.
+ *
+ * Unit convention (same as every other Blockberry number this codebase
+ * consumes — balances arrive as base-unit integers): an integer value is
+ * read as MIST (1e9 per SUI); a fractional value is already SUI. Integers
+ * below 1_000_000 MIST (0.001 SUI) are treated as unknown — a real floor
+ * below that is economically meaningless, and this avoids displaying a
+ * dust artifact as a price. Zero/negative/non-numeric → unknown.
+ * Exported for unit tests.
+ */
+export function normalizeFloorPrice(raw) {
+  let v = raw;
+  if (typeof v === "string" && v.trim() !== "" && isFinite(Number(v))) v = Number(v);
+  if (typeof v !== "number" || !isFinite(v) || v <= 0) return null;
+  const sui = Number.isInteger(v) ? (v < 1_000_000 ? null : v / 1e9) : v;
+  if (sui == null || !(sui > 0) || !isFinite(sui)) return null;
+  return { sui };
+}
+
+/**
+ * Attach real floor prices to portfolio NFTs. Only Blockberry-sourced
+ * entries carry a price; RPC-fallback NFTs (and anything unparseable)
+ * get floorPriceSui: null → the UI renders "Floor —", never an invention.
+ * Exported for unit tests.
+ */
+export function withNftFloors(nfts) {
+  if (!Array.isArray(nfts)) return [];
+  return nfts.map((n) => {
+    if (!n || typeof n !== "object") return n;
+    const norm = normalizeFloorPrice(n.floorPrice ?? n.floor_price);
+    return {
+      ...n,
+      floorPriceSui: norm ? norm.sui : null,
+      floorPriceKnown: !!norm,
+    };
+  });
+}
+
+/**
  * Fetch coin metadata from Blockberry.
  * Endpoint: GET /sui/v1/coins/{coinType}
  * Returns: { name, symbol, decimals, iconUrl, ... } or null.
@@ -1444,6 +1483,12 @@ const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 const COINGECKO_TTL = 5 * 60 * 1000;
 let coingeckoCache = { map: new Map(), fetchedAt: 0 };
 let coingecko429Until = 0; // timestamp when 429 cooldown expires
+
+/** Test hook: drop CoinGecko caches so failure paths are actually exercised. */
+export function resetCoinGeckoCache() {
+  coingeckoCache = { map: new Map(), fetchedAt: 0 };
+  coingecko429Until = 0;
+}
 
 const SYMBOL_TO_CG_ID = {
   SUI: "sui",
@@ -2489,7 +2534,7 @@ export async function handlePortfolioRequest(queryString) {
       status: 200,
       body: {
         tokens,
-        nfts,
+        nfts: withNftFloors(nfts),
         suiNsName,
         source: bbBalances ? "blockberry" : "rpc",
         updatedAt: Date.now(),
@@ -2549,6 +2594,43 @@ async function readAllBalances(address) {
      2. Builds merge + swap commands for each token
      3. Returns the serialized PTB bytes as base64
  ===================================================================== */
+
+/* ---------- Live network stats (hero strip — real, keyless data) ---------- */
+
+let networkStatsCache = { data: null, fetchedAt: 0 };
+const NETWORK_STATS_TTL = 60_000;
+
+/** Test hook: drop the cached stats so each test fetches fresh. */
+export function resetNetworkStatsCache() {
+  networkStatsCache = { data: null, fetchedAt: 0 };
+}
+
+/**
+ * Live Sui network facts: SUI/USD price (CoinGecko, cached) and the latest
+ * mainnet checkpoint (direct RPC read). No API key needed, nothing invented:
+ * any field that cannot be fetched returns null and the UI hides the strip.
+ */
+export async function handleNetworkStats() {
+  const now = Date.now();
+  if (networkStatsCache.data && now - networkStatsCache.fetchedAt < NETWORK_STATS_TTL) {
+    return { status: 200, body: networkStatsCache.data };
+  }
+  let suiUsd = null;
+  let checkpoint = null;
+  try {
+    const prices = await fetchCoinGeckoPrices(["SUI"]);
+    const sui = prices.get("SUI");
+    if (sui && sui.price > 0) suiUsd = sui.price;
+  } catch { /* price stays null — strip hides */ }
+  try {
+    const seq = await rpcCall("sui_getLatestCheckpointSequenceNumber", []);
+    const n = typeof seq === "string" || typeof seq === "number" ? Number(seq) : NaN;
+    if (Number.isFinite(n) && n > 0) checkpoint = Math.floor(n);
+  } catch { /* checkpoint stays null — strip hides */ }
+  const body = { suiUsd, checkpoint, updatedAt: now };
+  networkStatsCache = { data: body, fetchedAt: now };
+  return { status: 200, body };
+}
 
 export async function handleSwapDustRequest(rawBody) {
   let parsed;

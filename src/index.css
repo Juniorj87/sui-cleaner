@@ -6759,6 +6759,13 @@ h1, h2, h3{
   {color: var(--xr-safe, #46b58c);
 }.portfolio-nft-cat.unverified 
   {color: var(--text-muted, #6e675e);
+}.portfolio-nft-floor 
+  {font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--xr-safe, #46b58c);
+}.portfolio-nft-floor.unknown 
+  {color: var(--text-muted, #6e675e);
 }.portfolio-actions 
   {display: flex;
   gap: 10px;

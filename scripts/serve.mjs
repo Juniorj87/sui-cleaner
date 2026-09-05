@@ -16,7 +16,7 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { handleRpcRequest, handleGraphqlRequest, handleQuoteRequest, handleConfigRequest } from "../server/rpc-proxy.mjs";
-import { handleAiRequest, handlePortfolioRequest, handleSwapDustRequest } from "../server/ai-proxy.mjs";
+import { handleAiRequest, handlePortfolioRequest, handleSwapDustRequest, handleNetworkStats } from "../server/ai-proxy.mjs";
 import { handleImageProxyRequest } from "../server/image-proxy.mjs";
 
 const PORT = Number(process.env.PORT ?? 4173);
@@ -118,6 +118,15 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/api/config") {
     const { status, body } = await handleConfigRequest();
+    res.statusCode = status;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(body));
+    return;
+  }
+
+  if (url.pathname === "/api/network-stats") {
+    if (req.method !== "GET") { res.statusCode = 405; res.end(); return; }
+    const { status, body } = await handleNetworkStats();
     res.statusCode = status;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(body));

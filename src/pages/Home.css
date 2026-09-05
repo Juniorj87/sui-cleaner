@@ -415,6 +415,114 @@
   color: var(--sc-text-muted);
 }
 
+/* Live network strip (real price + checkpoint, hidden when unavailable) */
+.sc-hero-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--sc-cyan-soft);
+  background: rgba(35, 196, 255, 0.07);
+  border: 1px solid rgba(35, 196, 255, 0.20);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+/* Proof-of-clean teaser under the hero trust row */
+.sc-hero-proof {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--sc-text-muted);
+}
+
+.sc-hero-proof a {
+  color: var(--sc-cyan);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sc-hero-proof a:hover {
+  text-decoration: underline;
+}
+
+/* Proof page — verified transaction card */
+.sc-proof-card {
+  background: var(--sc-panel);
+  border: 1px solid var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  padding: 28px;
+  margin: 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 860px;
+}
+
+.sc-proof-digest {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.sc-proof-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--sc-text-muted);
+}
+
+.sc-proof-digest-hash {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--sc-text-main);
+  word-break: break-all;
+  margin: 0;
+}
+
+.sc-proof-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.sc-proof-table th,
+.sc-proof-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sc-proof-table th {
+  font-weight: 600;
+  color: var(--sc-text-body);
+}
+
+.sc-proof-table td.mono {
+  font-family: var(--font-mono);
+  color: var(--sc-cyan-soft);
+  white-space: nowrap;
+}
+
+.sc-proof-src {
+  font-size: 12px;
+  color: var(--sc-text-dim);
+}
+
+.sc-proof-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sc-text-body);
+}
+
 /* ============================================================
    BUTTONS
    ============================================================ */

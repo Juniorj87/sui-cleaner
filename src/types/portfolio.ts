@@ -53,6 +53,21 @@ export interface NftAsset {
   category: NftCategory;
   imageUrl: string;
   tokenId: string;
+  /**
+   * Real collection floor price in SUI from the upstream provider
+   * (Blockberry, when configured). Null when unknown — the UI renders
+   * "Floor —" and never invents a price.
+   */
+  floorPriceSui?: number | null;
+  /** true only when floorPriceSui holds a real provider value */
+  floorPriceKnown?: boolean;
+}
+
+/** Format a known SUI floor compactly (2.5 → "2.5", 0.042 → "0.042"). */
+export function formatFloorSui(value: number): string {
+  if (!isFinite(value) || value <= 0) return "—";
+  const rounded = Math.round(value * 10000) / 10000;
+  return String(rounded);
 }
 
 export interface PortfolioData {

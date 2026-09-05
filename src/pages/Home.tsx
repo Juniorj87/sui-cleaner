@@ -1,9 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "./Home.css";
 import allImg from "../assets/all3.png";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+
+interface NetworkStats {
+  suiUsd: number | null;
+  checkpoint: number | null;
+}
+
+/** Live Sui network facts (price + checkpoint). Silent when unavailable. */
+function NetworkStrip() {
+  const [stats, setStats] = useState<NetworkStats | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/network-stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && (d.suiUsd || d.checkpoint)) setStats(d);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!stats) return null;
+  return (
+    <div className="sc-hero-live" aria-label="Live network status">
+      <span className="sc-pill-dot" aria-hidden="true" />
+      <span>LIVE</span>
+      {typeof stats.suiUsd === "number" && <span>SUI ${stats.suiUsd.toFixed(2)}</span>}
+      {typeof stats.checkpoint === "number" && (
+        <span>CHECKPOINT #{stats.checkpoint.toLocaleString("en-US")}</span>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -58,6 +89,7 @@ export default function Home() {
           <div className="sc-container">
             <div className="sc-hero-grid">
               <div className="sc-hero-copy">
+                <NetworkStrip />
                 <div className="sc-eyebrow">SUI OBJECT MANAGEMENT & STORAGE REBATE ENGINE</div>
                 <h1>
                   Clean your Sui wallet.
@@ -108,6 +140,11 @@ export default function Home() {
                   <span>✓ Pre-Execution Dry Run</span>
                   <span>·</span>
                   <span>✓ You Approve Every Action</span>
+                </div>
+
+                <div className="sc-hero-proof">
+                  <span>✓ Verified on-chain cleanup: +0.003596472 SUI rebate</span>
+                  <Link to="/proof">View proof →</Link>
                 </div>
               </div>
 
@@ -362,7 +399,7 @@ export default function Home() {
                 How Sui Cleaner <strong>Executes in 6 Phases</strong>
               </h2>
               <p className="sc-section-subtitle">
-                A non-custodial pipeline designed to ensure absolute safety, zero asset risk, and verified on-chain execution.
+                A non-custodial pipeline: dry-run simulation before signing, protected objects hard-blocked, and every result verified against on-chain effects.
               </p>
             </div>
 

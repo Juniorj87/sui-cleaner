@@ -7,6 +7,7 @@ import Docs from "./pages/Docs";
 import Faq from "./pages/Faq";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import Proof from "./pages/Proof";
 import AppPage from "./pages/AppPage";
 
 // /visual is a standalone prototype shell with its own generic CSS
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/faq" element={<Faq />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
+      <Route path="/proof" element={<Proof />} />
 
       {/* APP — the product itself */}
       <Route path="/app" element={<AppPage />} />

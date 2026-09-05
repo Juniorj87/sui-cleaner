@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 // @ts-ignore — .mjs imports are resolved by Vite at runtime, not by tsc
 import { handleRpcRequest, handleGraphqlRequest, handleQuoteRequest, handleConfigRequest } from "./server/rpc-proxy.mjs";
 // @ts-ignore
-import { handleAiRequest, handlePortfolioRequest, handleSwapDustRequest } from "./server/ai-proxy.mjs";
+import { handleAiRequest, handlePortfolioRequest, handleSwapDustRequest, handleNetworkStats } from "./server/ai-proxy.mjs";
 // @ts-ignore
 import { handleImageProxyRequest } from "./server/image-proxy.mjs";
 
@@ -93,6 +93,18 @@ export default defineConfig({
         server.middlewares.use("/api/config", async (req: any, res: any) => {
           setSecurityHeaders(res);
           const { status, body } = await handleConfigRequest();
+          res.statusCode = status;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify(body));
+        });
+        server.middlewares.use("/api/network-stats", async (req: any, res: any) => {
+          setSecurityHeaders(res);
+          if (req.method !== "GET") {
+            res.statusCode = 405;
+            res.end();
+            return;
+          }
+          const { status, body } = await handleNetworkStats();
           res.statusCode = status;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify(body));
