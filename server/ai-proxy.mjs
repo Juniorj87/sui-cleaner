@@ -1257,9 +1257,11 @@ async function callBlockberry(endpoint) {
   if (!BLOCKBERRY_KEY) return null;
   const url = `${BLOCKBERRY_BASE}${endpoint}`;
   try {
+    // Auth scheme verified live: Blockberry One expects `x-api-key`
+    // (Bearer yields 401 even with a valid key).
     const res = await fetch(url, {
       headers: {
-        "Authorization": `Bearer ${BLOCKBERRY_KEY}`,
+        "x-api-key": BLOCKBERRY_KEY,
         "Accept": "application/json",
       },
       signal: AbortSignal.timeout(BLOCKBERRY_TIMEOUT),
@@ -1283,7 +1285,10 @@ async function callBlockberry(endpoint) {
 /**
  * Fetch token balances from Blockberry.
  * Endpoint: GET /sui/v1/accounts/{address}/balance
- * Returns: { totalBalance: [...], coins: [...] } or null.
+ * Live shape (verified): a bare array of
+ * { coinType, coinName, coinSymbol, balance, balanceUsd, decimals, ... }
+ * where `balance` is HUMAN-READABLE (decimal SUI-style), not base units.
+ * Normalized to base-unit strings so downstream BigInt math keeps working.
  */
 async function callBlockberryBalance(address) {
   const key = bbCacheKey("balance", address);
@@ -1293,20 +1298,28 @@ async function callBlockberryBalance(address) {
   const data = await callBlockberry(`/accounts/${address}/balance`);
   if (!data) return null;
 
-  // Blockberry returns { totalBalance: [{ coinType, totalBalance, ... }]
-  // or { coins: [...] } depending on endpoint version
-  const coins = data.totalBalance ?? data.coins ?? data.data ?? [];
+  const coins = Array.isArray(data)
+    ? data
+    : (data.totalBalance ?? data.coins ?? data.data ?? []);
   if (!Array.isArray(coins) || coins.length === 0) return null;
 
   // Normalize to our format: [{ coinType, totalBalance, symbol?, name?, decimals?, iconUrl? }]
-  const result = coins.map((c) => ({
-    coinType: c.coinType ?? c.coin_type ?? c.type ?? "",
-    totalBalance: String(c.totalBalance ?? c.total_balance ?? c.balance ?? "0"),
-    symbol: c.symbol ?? null,
-    name: c.name ?? null,
-    decimals: c.decimals ?? null,
-    iconUrl: fixIpfsUrl(c.iconUrl ?? c.icon_url ?? c.image ?? null),
-  }));
+  const result = coins.map((c) => {
+    const decimals = Number.isInteger(c.decimals) ? c.decimals : null;
+    const human = Number(c.balance ?? c.totalBalance ?? c.total_balance ?? "0");
+    const totalBalance =
+      decimals != null && isFinite(human)
+        ? String(Math.round(human * 10 ** decimals))
+        : String(c.totalBalance ?? c.total_balance ?? c.balance ?? "0");
+    return {
+      coinType: c.coinType ?? c.coin_type ?? c.type ?? "",
+      totalBalance,
+      symbol: c.coinSymbol ?? c.symbol ?? null,
+      name: c.coinName ?? c.name ?? null,
+      decimals,
+      iconUrl: fixIpfsUrl(c.iconUrl ?? c.icon_url ?? c.image ?? null),
+    };
+  });
 
   bbCacheSet(key, result);
   return result;
@@ -1314,69 +1327,83 @@ async function callBlockberryBalance(address) {
 
 /**
  * Fetch NFTs from Blockberry.
- * Endpoint: GET /sui/v1/accounts/{address}/nfts
- * Returns: [{ objectId, name, collection, image, ... }] or null.
+ * Endpoint: GET /sui/v1/nfts/wallet/{address}?page&size&orderBy&sortBy
+ * (the /accounts/{address}/nfts path does not exist — verified live).
+ * Live item shape: { id, type, objectName, imgUrl, description, amount,
+ * latestPrice } where latestPrice is the item's last recorded sale in SUI
+ * (decimal) or null when never sold. There is no per-item collection or
+ * floor field — so no floor is claimed; see normalizeSuiAmount.
  */
+const BB_NFT_PAGE_SIZE = 50;
+const BB_NFT_MAX_ITEMS = 300;
+
 async function callBlockberryNfts(address) {
   const key = bbCacheKey("nfts", address);
   const cached = bbCached(key);
   if (cached) return cached;
 
-  const data = await callBlockberry(`/accounts/${address}/nfts`);
-  if (!data) return null;
+  const items = [];
+  for (let page = 0; ; page++) {
+    const data = await callBlockberry(
+      `/nfts/wallet/${address}?page=${page}&size=${BB_NFT_PAGE_SIZE}&orderBy=DESC&sortBy=AGE`
+    );
+    if (!data) return items.length > 0 ? items : null;
+    const content = Array.isArray(data.content) ? data.content : [];
+    for (const n of content) {
+      const norm = normalizeSuiAmount(n?.latestPrice);
+      items.push({
+        name: n?.objectName ?? "Unknown NFT",
+        collection: "Unknown",
+        category: "unverified",
+        imageUrl: fixIpfsUrl(n?.imgUrl ?? ""),
+        tokenId: n?.id ?? "",
+        lastSaleSui: norm ? norm.sui : null,
+        lastSaleKnown: !!norm,
+      });
+      if (items.length >= BB_NFT_MAX_ITEMS) break;
+    }
+    if (data.last !== false || content.length === 0 || items.length >= BB_NFT_MAX_ITEMS) break;
+  }
+  if (items.length === 0) return null;
 
-  const nftsRaw = data.nfts ?? data.data ?? (Array.isArray(data) ? data : []);
-  if (!Array.isArray(nftsRaw) || nftsRaw.length === 0) return null;
-
-  const result = nftsRaw.map((n) => ({
-    name: n.name ?? n.displayName ?? "Unknown NFT",
-    collection: n.collectionName ?? n.collection ?? n.collectionName ?? "Unknown",
-    category: n.verified ?? n.isVerified ? "verified" : "unverified",
-    imageUrl: fixIpfsUrl(n.imageUri ?? n.image ?? n.imageUrl ?? n.displayUrl ?? ""),
-    tokenId: n.objectId ?? n.object_id ?? "",
-    collectionVerified: n.collectionVerified ?? false,
-    floorPrice: n.floorPrice ?? n.floor_price ?? null,
-  }));
-
-  bbCacheSet(key, result);
-  return result;
+  bbCacheSet(key, items);
+  return items;
 }
 
 /**
- * Normalize a Blockberry NFT floor price to SUI, or null when unknown.
+ * Normalize a Blockberry Sui price figure to SUI, or null when unknown.
  *
- * Unit convention (same as every other Blockberry number this codebase
- * consumes — balances arrive as base-unit integers): an integer value is
- * read as MIST (1e9 per SUI); a fractional value is already SUI. Integers
- * below 1_000_000 MIST (0.001 SUI) are treated as unknown — a real floor
- * below that is economically meaningless, and this avoids displaying a
- * dust artifact as a price. Zero/negative/non-numeric → unknown.
- * Exported for unit tests.
+ * Verified live against api.blockberry.one/sui/v1: every numeric field
+ * observed (coin balances like 2251.0000000000, NFT latestPrice like 3.2)
+ * arrives HUMAN-READABLE in SUI units — so finite positive numbers are SUI
+ * as-is. The single exception guard: integers ≥ 1e12 cannot be SUI (total
+ * supply is 1e10) and are read as MIST. Zero/negative/non-numeric →
+ * unknown, never zero-filled. Exported for unit tests.
  */
-export function normalizeFloorPrice(raw) {
+export function normalizeSuiAmount(raw) {
   let v = raw;
   if (typeof v === "string" && v.trim() !== "" && isFinite(Number(v))) v = Number(v);
   if (typeof v !== "number" || !isFinite(v) || v <= 0) return null;
-  const sui = Number.isInteger(v) ? (v < 1_000_000 ? null : v / 1e9) : v;
-  if (sui == null || !(sui > 0) || !isFinite(sui)) return null;
+  const sui = v >= 1e12 ? v / 1e9 : v;
+  if (!(sui > 0) || !isFinite(sui)) return null;
   return { sui };
 }
 
 /**
- * Attach real floor prices to portfolio NFTs. Only Blockberry-sourced
- * entries carry a price; RPC-fallback NFTs (and anything unparseable)
- * get floorPriceSui: null → the UI renders "Floor —", never an invention.
- * Exported for unit tests.
+ * Attach real last-sale prices to portfolio NFTs. Only Blockberry-sourced
+ * entries carry one (latestPrice = that item's last recorded sale);
+ * RPC-fallback NFTs (and anything unparseable) get lastSaleSui: null →
+ * the UI renders "Price —", never an invention. Exported for unit tests.
  */
-export function withNftFloors(nfts) {
+export function withNftPrices(nfts) {
   if (!Array.isArray(nfts)) return [];
   return nfts.map((n) => {
     if (!n || typeof n !== "object") return n;
-    const norm = normalizeFloorPrice(n.floorPrice ?? n.floor_price);
+    const norm = normalizeSuiAmount(n.lastSaleSui ?? n.latestPrice ?? n.floorPrice ?? n.floor_price);
     return {
       ...n,
-      floorPriceSui: norm ? norm.sui : null,
-      floorPriceKnown: !!norm,
+      lastSaleSui: norm ? norm.sui : null,
+      lastSaleKnown: !!norm,
     };
   });
 }
@@ -2534,7 +2561,9 @@ export async function handlePortfolioRequest(queryString) {
       status: 200,
       body: {
         tokens,
-        nfts: withNftFloors(nfts),
+        // Real last-sale prices where the provider gave them; every other
+        // NFT gets lastSaleSui: null → "Price —" in the UI, never invented.
+        nfts: withNftPrices(nfts),
         suiNsName,
         source: bbBalances ? "blockberry" : "rpc",
         updatedAt: Date.now(),

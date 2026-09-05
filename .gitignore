@@ -53,6 +53,9 @@ backup_*/
 # Local run artifacts (headless screenshots, verify output)
 /artifacts/
 
+# Local demo video (large binary, kept out of the repo by decision)
+public/demo.mp4
+
 # Local design-review screenshot dumps (not product assets)
 # Bundled artwork lives in src/assets/ and IS committed.
 /desing_all_0.1.9.26/

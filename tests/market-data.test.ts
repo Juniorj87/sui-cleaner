@@ -8,64 +8,64 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  normalizeFloorPrice,
-  withNftFloors,
+  normalizeSuiAmount,
+  withNftPrices,
   handleNetworkStats,
   resetNetworkStatsCache,
   resetCoinGeckoCache,
 } from "../server/ai-proxy.mjs";
-import { formatFloorSui } from "../src/types/portfolio";
+import { formatSuiAmount } from "../src/types/portfolio";
 
-describe("normalizeFloorPrice (Blockberry base-unit convention)", () => {
-  it("integer MIST values convert to SUI", () => {
-    expect(normalizeFloorPrice(2_500_000_000)).toEqual({ sui: 2.5 });
-    expect(normalizeFloorPrice(500_000_000)).toEqual({ sui: 0.5 });
-    expect(normalizeFloorPrice("1000000000")).toEqual({ sui: 1 });
+describe("normalizeSuiAmount (live Blockberry One convention)", () => {
+  it("human-readable decimals pass through as SUI (verified live: 3.2)", () => {
+    expect(normalizeSuiAmount(3.2)).toEqual({ sui: 3.2 });
+    expect(normalizeSuiAmount(2.5)).toEqual({ sui: 2.5 });
+    expect(normalizeSuiAmount(0.042)).toEqual({ sui: 0.042 });
+    expect(normalizeSuiAmount(2)).toEqual({ sui: 2 });
+    expect(normalizeSuiAmount("1000000000")).toEqual({ sui: 1000000000 });
   });
 
-  it("fractional values are already SUI", () => {
-    expect(normalizeFloorPrice(2.5)).toEqual({ sui: 2.5 });
-    expect(normalizeFloorPrice(0.042)).toEqual({ sui: 0.042 });
+  it("impossible magnitudes (≥ total supply) fall back to MIST", () => {
+    expect(normalizeSuiAmount(2_500_000_000_000)).toEqual({ sui: 2500 });
   });
 
-  it("zero, negative, dust integers and junk are unknown", () => {
-    expect(normalizeFloorPrice(0)).toBeNull();
-    expect(normalizeFloorPrice(-5)).toBeNull();
-    expect(normalizeFloorPrice(42)).toBeNull(); // 42 MIST = dust, not a price
-    expect(normalizeFloorPrice("")).toBeNull();
-    expect(normalizeFloorPrice("n/a")).toBeNull();
-    expect(normalizeFloorPrice(null)).toBeNull();
-    expect(normalizeFloorPrice(undefined)).toBeNull();
-    expect(normalizeFloorPrice(NaN)).toBeNull();
+  it("zero, negative and junk are unknown", () => {
+    expect(normalizeSuiAmount(0)).toBeNull();
+    expect(normalizeSuiAmount(-5)).toBeNull();
+    expect(normalizeSuiAmount("")).toBeNull();
+    expect(normalizeSuiAmount("n/a")).toBeNull();
+    expect(normalizeSuiAmount(null)).toBeNull();
+    expect(normalizeSuiAmount(undefined)).toBeNull();
+    expect(normalizeSuiAmount(NaN)).toBeNull();
   });
 });
 
-describe("withNftFloors (portfolio passthrough)", () => {
-  it("attaches known floors, marks the rest unknown", () => {
-    const out = withNftFloors([
-      { name: "A", floorPrice: 2_500_000_000 },
+describe("withNftPrices (portfolio passthrough)", () => {
+  it("attaches real last sales, marks the rest unknown", () => {
+    const out = withNftPrices([
+      { name: "SEED Mon", latestPrice: 3.2 },
       { name: "B" },
-      { name: "C", floorPrice: 0 },
+      { name: "C", latestPrice: null },
       null,
     ]);
-    expect(out[0]).toMatchObject({ floorPriceSui: 2.5, floorPriceKnown: true });
-    expect(out[1]).toMatchObject({ floorPriceSui: null, floorPriceKnown: false });
-    expect(out[2]).toMatchObject({ floorPriceSui: null, floorPriceKnown: false });
+    expect(out[0]).toMatchObject({ lastSaleSui: 3.2, lastSaleKnown: true });
+    expect(out[1]).toMatchObject({ lastSaleSui: null, lastSaleKnown: false });
+    expect(out[2]).toMatchObject({ lastSaleSui: null, lastSaleKnown: false });
     expect(out[3]).toBeNull();
   });
 
   it("non-arrays pass through as empty", () => {
-    expect(withNftFloors(null)).toEqual([]);
-    expect(withNftFloors(undefined)).toEqual([]);
+    expect(withNftPrices(null)).toEqual([]);
+    expect(withNftPrices(undefined)).toEqual([]);
   });
 });
 
-describe("formatFloorSui", () => {
+describe("formatSuiAmount", () => {
   it("compacts decimals, guards garbage", () => {
-    expect(formatFloorSui(2.5)).toBe("2.5");
-    expect(formatFloorSui(0.042)).toBe("0.042");
-    expect(formatFloorSui(0)).toBe("—");
-    expect(formatFloorSui(-1)).toBe("—");
+    expect(formatSuiAmount(2.5)).toBe("2.5");
+    expect(formatSuiAmount(0.042)).toBe("0.042");
+    expect(formatSuiAmount(0)).toBe("—");
+    expect(formatSuiAmount(-1)).toBe("—");
   });
 });
 

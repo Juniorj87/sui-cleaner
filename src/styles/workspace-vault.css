@@ -6384,6 +6384,41 @@
   padding: 2px 6px;
 }
 
+/* App Home readability: the global .app-page .btn pixel treatment (9px)
+   is too small for this landing — bump home type while keeping the same
+   dark/cyan look. Scoped to .app-home only; other screens untouched. */
+.app-page .app-home .btn {
+  font-size: 12px !important;
+  padding: 13px 22px !important;
+}
+
+.app-page .app-home .final-sub {
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.app-home-panel-title {
+  font-size: 13px;
+}
+
+.app-home-input {
+  font-size: 15px;
+  padding: 12px 16px;
+}
+
+.app-home-note,
+.app-home-meta {
+  font-size: 13px;
+}
+
+.app-home-addr {
+  font-size: 14px;
+}
+
+.app-home-error {
+  font-size: 13px;
+}
+
 .app-home-meta {
   font-size: 12px;
   color: #94a3b8;

@@ -11,13 +11,6 @@ seed phrases or private keys. See [SECURITY.md](./SECURITY.md).
 > Package name in this repo: `sui-cleaner-visual` (`package.json`).
 > License: MIT — see [LICENSE](./LICENSE) (`Copyright (c) 2026 SuiCleaner contributors`).
 
-## Demo video
-
-<video src="public/demo.webm" controls width="100%"></video>
-
-12-second walkthrough (demo wallet): scan → review → final check → wallet
-approval. No real transaction is sent in the demo.
-
 ## Key features
 
 - **Read-only wallet scan** of any Sui address (no wallet connection needed to inspect).
