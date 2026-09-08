@@ -1,0 +1,18 @@
+# Keep the free Render instance awake: ping /api/ping every 10 minutes
+# so it never hits the 15-minute idle spin-down. Public repo = free minutes.
+# Manual runs: Actions tab -> "Keep Render awake" -> Run workflow.
+
+name: Keep Render awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping production (fail loudly on error)
+        run: curl --fail --max-time 90 -sS -o /dev/null https://sui-cleaner.onrender.com/api/ping

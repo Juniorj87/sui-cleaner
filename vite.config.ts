@@ -97,6 +97,17 @@ export default defineConfig({
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify(body));
         });
+        server.middlewares.use("/api/ping", async (req: any, res: any) => {
+          setSecurityHeaders(res);
+          if (req.method !== "GET") {
+            res.statusCode = 405;
+            res.end();
+            return;
+          }
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+        });
         server.middlewares.use("/api/network-stats", async (req: any, res: any) => {
           setSecurityHeaders(res);
           if (req.method !== "GET") {

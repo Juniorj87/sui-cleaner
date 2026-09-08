@@ -124,6 +124,16 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Lightweight keep-awake probe: no RPC, no work, instant 200.
+  // Used by the scheduled pinger so the free instance never idles out.
+  if (url.pathname === "/api/ping") {
+    if (req.method !== "GET") { res.statusCode = 405; res.end(); return; }
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+    return;
+  }
+
   if (url.pathname === "/api/network-stats") {
     if (req.method !== "GET") { res.statusCode = 405; res.end(); return; }
     const { status, body } = await handleNetworkStats();
