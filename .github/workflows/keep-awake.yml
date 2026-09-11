@@ -1,8 +1,17 @@
 # Keep the free Render instance awake: ping /api/ping every 5 minutes
 # so it never hits the 15-minute idle spin-down. Public repo = free minutes.
 # Manual runs: Actions tab -> "Keep Render awake" -> Run workflow.
-# NOTE: GitHub cron can lag/skip runs — retries below survive a cold-start 503,
-# but for 100% uptime add a second pinger (UptimeRobot / cron-job.org every 5 min).
+#
+# IMPORTANT: this workflow is only BACKUP. GitHub cron is best-effort — runs
+# can lag 10-30+ min under load, and GitHub auto-disables scheduled workflows
+# after 60 days without repo activity. A single gap >15 min puts Render back
+# to sleep. The PRIMARY keep-awake must be a dedicated pinger
+# (cron-job.org every 1-5 min and/or UptimeRobot every 5 min) pointing at
+# /api/ping — see DEPLOY.md. This workflow just covers pinger outages.
+#
+# Optional repo secret RENDER_PING_URL: full ping URL
+# (e.g. https://<ваш-сервис>.onrender.com/api/ping). Falls back to the
+# hardcoded URL below — update it if the service is renamed.
 
 name: Keep Render awake
 
@@ -14,16 +23,20 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     steps:
       - name: Ping production (retry cold-start, fail loudly on error)
+        env:
+          PING_URL: ${{ secrets.RENDER_PING_URL }}
         run: |
+          URL="${PING_URL:-https://sui-cleaner.onrender.com/api/ping}"
+          echo "pinging $URL ..."
           for i in 1 2 3; do
-            if curl --fail --max-time 90 -sS -o /dev/null https://sui-cleaner.onrender.com/api/ping; then
-              echo "ping ok (attempt $i)"
+            if curl --fail --max-time 60 -sS -o /dev/null "$URL"; then
+              echo "$(date -u +%FT%TZ) ping ok (attempt $i)"
               exit 0
             fi
-            echo "attempt $i failed, waiting 30s..."
+            echo "$(date -u +%FT%TZ) attempt $i failed, waiting 30s..."
             sleep 30
           done
           echo "all ping attempts failed"
