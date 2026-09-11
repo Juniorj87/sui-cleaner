@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
-import faqBg from "../assets/faq.png";
+import faqBg from "../assets/faq.jpg";
 import "./Home.css";
 
 interface FaqItem {

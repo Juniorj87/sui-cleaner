@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
-import docsBg from "../assets/docs.png";
+import docsBg from "../assets/docs.jpg";
 import "./Home.css";
 
 export default function Docs() {

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
-import securityImg from "../assets/security.png";
+import securityImg from "../assets/security.jpg";
 import "./Home.css";
 
 export default function Security() {
