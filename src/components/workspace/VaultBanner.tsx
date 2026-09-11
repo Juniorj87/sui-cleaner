@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback } from "react";
-import { Copy, Check, ExternalLink, Coins, ArrowRight, Wallet, Search } from "lucide-react";
+import { Copy, Check, ExternalLink, Coins, ArrowRight, Wallet, RefreshCw } from "lucide-react";
 import type { WalletObject } from "../../scanner/objectClassifier";
-import { walletCondition } from "../../scanner/objectClassifier";
+import { deriveWalletHealth, deriveActionGroups } from "../../scanner/objectClassifier";
+import { OBJECT_FILTER_EVENT, type ObjectFilter } from "./WalletObjectsTable";
 
 interface VaultBannerProps {
   address?: string | null;
@@ -14,12 +15,24 @@ interface VaultBannerProps {
   onConnect?: () => void;
   onDemo?: () => void;
   onScanAddress?: (address: string) => void;
+  /** wallet monitor: re-run the current scan (no backend, no notifications) */
+  onRescan?: () => void;
+  lastScannedAt?: number | null;
 }
 
 function shortAddr(addr: string) {
   if (!addr) return "";
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function timeAgoLabel(ts?: number | null): string {
+  if (!ts) return "Just now";
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return "Just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
 export default function VaultBanner({
@@ -33,49 +46,32 @@ export default function VaultBanner({
   onConnect,
   onDemo,
   onScanAddress,
+  onRescan,
+  lastScannedAt,
 }: VaultBannerProps) {
   const [copied, setCopied] = useState(false);
+  const [showScoreWhy, setShowScoreWhy] = useState(false);
 
+  // Scan facts — every number is derived from the real scan (no fake data).
+  // The score reuses the deterministic walletCondition via deriveWalletHealth.
   const stats = useMemo(() => {
-    const total = objects.length;
-    const cleanable = cleanableCount;
-    const review = objects.filter((o) => o.classification === "review" || o.classification === "suspicious").length;
-    const protectedCount = objects.filter((o) => o.protected).length;
-    const keepCount = objects.filter((o) => o.classification === "keep").length;
-    const suspiciousCount = objects.filter((o) => o.classification === "suspicious").length;
-
-    // Wallet purity calculation
-    const rawCondition =
-      total > 0
-        ? walletCondition({
-            total,
-            keep: keepCount,
-            review,
-            suspicious: suspiciousCount,
-            cleanable,
-            protected: protectedCount,
-            valuable: 0,
-            trusted: 0,
-            byKind: { nft: 0, token: 0, object: 0 },
-            estimatedValueUsd: 0,
-          })
-        : 100;
-
-    // In demo or cases where cleanable ratio is high, calculate clean visual purity
-    const cleanableRatio = total > 0 ? (cleanable + suspiciousCount) / total : 0;
-    const purity = Math.max(5, Math.min(100, Math.round((1 - cleanableRatio) * 100)));
-    const storageTakingPercent = 100 - purity;
-
+    const health = deriveWalletHealth(objects);
+    const groups = deriveActionGroups(objects);
+    const purity = health.score;
     return {
-      total,
-      cleanable,
-      review,
-      protectedCount,
+      total: health.total,
+      cleanable: cleanableCount,
+      health,
+      groups,
       purity,
-      rawCondition,
-      storageTakingPercent,
+      rawCondition: health.score,
     };
   }, [objects, cleanableCount]);
+
+  /** action boxes jump to the matching object-table filter (existing mechanism) */
+  const jumpToFilter = useCallback((filter: ObjectFilter) => {
+    window.dispatchEvent(new CustomEvent(OBJECT_FILTER_EVENT, { detail: filter }));
+  }, []);
 
   const handleCopy = useCallback(() => {
     if (!address) return;
@@ -194,10 +190,21 @@ export default function VaultBanner({
               0x30a2...90ef <span className="demo-tag">DEMO</span>
             </div>
           )}
-          <div className="wo-scan-time">Last scan: Just now</div>
+          <div className="wo-scan-time">Last scan: {timeAgoLabel(lastScannedAt)}</div>
+          {onRescan && (
+            <button
+              type="button"
+              className="wo-rescan-btn"
+              onClick={onRescan}
+              title="Re-scan this wallet for new spam (read-only, no backend)"
+            >
+              <RefreshCw size={12} strokeWidth={2.2} />
+              <span>Scan for new spam</span>
+            </button>
+          )}
         </div>
 
-        {/* Center: Wallet Purity with Circular Gauge */}
+        {/* Center: Cleanup Score (secondary) — real scan metrics stay primary */}
         <div className="wo-purity-col">
           <div className="wo-gauge-wrap">
             <svg className="wo-gauge-svg" width="68" height="68" viewBox="0 0 68 68">
@@ -222,11 +229,16 @@ export default function VaultBanner({
                 stroke={purityColor}
               />
             </svg>
-            <span className="wo-gauge-text">{stats.purity}%</span>
+            <span className="wo-gauge-text" title="Cleanup Score — algorithmic indicator, not an official Sui metric">
+              {stats.purity}
+            </span>
           </div>
 
           <div className="wo-purity-info">
-            <div className="wo-label">WALLET PURITY</div>
+            <div className="wo-label">CLEANUP SCORE</div>
+            <div className="wo-health-score" data-testid="cleanup-score">
+              Cleanup Score: {stats.health.score} / 100
+            </div>
             <div className="wo-purity-track">
               <div
                 className="wo-purity-fill"
@@ -234,35 +246,91 @@ export default function VaultBanner({
               />
             </div>
             <div className="wo-purity-title">
-              {stats.purity >= 80 ? "Wallet is well optimized" : "Your wallet can be optimized."}
+              {stats.purity >= 80 ? "Little cleanup potential" : stats.purity >= 50 ? "Some cleanup potential." : "High cleanup potential."}
             </div>
             <div className="wo-purity-sub">
-              {stats.storageTakingPercent}% of objects are taking up storage
+              {stats.groups.cleanup} of {stats.total} objects are cleanup candidates
             </div>
+            <button
+              type="button"
+              className="wo-score-why-btn"
+              onClick={() => setShowScoreWhy((v) => !v)}
+              aria-expanded={showScoreWhy}
+              title="How this score is calculated"
+            >
+              {showScoreWhy ? "− Why this score?" : "+ Why this score?"}
+            </button>
+            {showScoreWhy && (
+              <div className="wo-score-why" data-testid="cleanup-score-why">
+                <ul className="why-list">
+                  <li>{stats.groups.cleanup} cleanup candidates detected by the current cleanup rules</li>
+                  <li>{stats.groups.emptyOrDust} empty or low-value objects</li>
+                  <li>{stats.groups.review} objects need your review</li>
+                  <li>{stats.groups.keep + stats.groups.protectedCount} objects kept or protected</li>
+                </ul>
+                <p className="wo-score-why-note">
+                  Starts at 100, minus 2 per spam-flagged object, 1 per object needing review,
+                  and 1 per 6 cleanable objects (min 25, max 99). An algorithmic cleanup
+                  indicator — not an official Sui metric. It is not an amount of SUI,
+                  nor a safety or quality rating.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right: Compact Statistics Grid */}
-        <div className="wo-stats-grid">
-          <div className="wo-stat-box">
-            <div className="wo-stat-num">{stats.total}</div>
-            <div className="wo-stat-lbl">TOTAL OBJECTS</div>
-          </div>
+        {/* Right: decision system — what to DO with each object (real counts).
+            Click a box to jump to the matching object-table filter. */}
+        <div className="wo-stats-grid wo-health-grid" data-testid="action-groups">
+          <button
+            type="button"
+            className="wo-stat-box wo-action-box"
+            onClick={() => jumpToFilter("all")}
+            title="All detected objects — every decision group"
+          >
+            <span className="wo-stat-num">{stats.total}</span>
+            <span className="wo-stat-lbl">OBJECTS</span>
+          </button>
 
-          <div className="wo-stat-box cleanable">
-            <div className="wo-stat-num stat-cleanable">{stats.cleanable}</div>
-            <div className="wo-stat-lbl">CLEANABLE</div>
-          </div>
+          <button
+            type="button"
+            className="wo-stat-box wo-action-box cleanable"
+            onClick={() => jumpToFilter("cleanable")}
+            title="Cleanup candidates — may be removable under the current rules. Candidate ≠ guaranteed safe deletion."
+          >
+            <span className="wo-stat-num stat-cleanable">{stats.groups.cleanup}</span>
+            <span className="wo-stat-lbl">CLEANUP</span>
+          </button>
 
-          <div className="wo-stat-box review">
-            <div className="wo-stat-num stat-review">{stats.review}</div>
-            <div className="wo-stat-lbl">REVIEW</div>
-          </div>
+          <button
+            type="button"
+            className="wo-stat-box wo-action-box review"
+            onClick={() => jumpToFilter("review")}
+            title="Objects that need your review before any action."
+          >
+            <span className="wo-stat-num stat-review">{stats.groups.review}</span>
+            <span className="wo-stat-lbl">REVIEW</span>
+          </button>
 
-          <div className="wo-stat-box protected">
-            <div className="wo-stat-num stat-protected">{stats.protectedCount}</div>
-            <div className="wo-stat-lbl">PROTECTED</div>
-          </div>
+          <button
+            type="button"
+            className="wo-stat-box wo-action-box"
+            onClick={() => jumpToFilter("keep")}
+            title="Active or important objects — recommended to keep."
+          >
+            <span className="wo-stat-num stat-keep">{stats.groups.keep}</span>
+            <span className="wo-stat-lbl">KEEP</span>
+          </button>
+
+          <button
+            type="button"
+            className="wo-stat-box wo-action-box protected"
+            onClick={() => jumpToFilter("protected")}
+            title="Objects that cannot be cleaned by the current cleanup flow."
+          >
+            <span className="wo-stat-num stat-protected">{stats.groups.protectedCount}</span>
+            <span className="wo-stat-lbl">PROTECTED</span>
+          </button>
         </div>
       </div>
 
@@ -280,6 +348,7 @@ export default function VaultBanner({
             </div>
             <div className="rec-sub">
               Estimated storage rebate from deletions that actually free storage (NFT burns return none).
+              Actual recovery depends on the objects removed and the resulting transaction.
             </div>
           </div>
         </div>

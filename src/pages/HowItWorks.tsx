@@ -44,7 +44,7 @@ export default function HowItWorks() {
       num: "03",
       title: "Deterministic Object Classification",
       subtitle: "Algorithmic matching against protocol and token registries",
-      desc: "Every object is classified using strict on-chain rules against known protocols (Cetus, Scallop, Navi, SpringSui, Aftermath) and verified NFT collections. Objects are segregated into KEEP, PROTECTED, REVIEW, and SAFE TO CLEAN.",
+      desc: "Every object is classified using strict on-chain rules against known protocols (Cetus, Scallop, Navi, SpringSui, Aftermath) and verified NFT collections. Objects are segregated into KEEP, PROTECTED, REVIEW, and CLEANUP CANDIDATES.",
       details: [
         "KEEP: Any Coin with balance > 0 and verified NFT collections",
         "PROTECTED: StakedSui, KioskOwnerCap, TreasuryCap, UpgradeCap (hard-blocked)",

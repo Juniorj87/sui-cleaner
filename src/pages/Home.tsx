@@ -43,26 +43,25 @@ export default function Home() {
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
+  // Preview only — questions already answered by the sections above
+  // (what it is, rebates, safety, custody, fees) are intentionally left out.
+  // Full answers live on /faq.
   const FAQ_ITEMS = [
     {
-      q: "What is Sui Cleaner and why does my wallet have unnecessary objects?",
-      a: "On the Sui blockchain, everything (tokens, NFTs, DeFi receipts, staking tickets) is an individual on-chain Move object. When you transact, swap, or transfer coins, empty coin objects (with 0 balance) and small dust objects remain stored in your wallet. Sui Cleaner scans your wallet, classifies these objects, and lets you safely delete them to reclaim your locked Storage Fund rebates."
+      q: "Which wallets are supported?",
+      a: "All standard Sui wallets via the official @mysten/dapp-kit standard, including Sui Wallet, Suiet, Nightly, Martian, OKX Wallet, Phantom, Bitget Wallet, and Ledger hardware wallets."
     },
     {
-      q: "How do I get money back from cleaning my wallet (Storage Rebates)?",
-      a: "Every object created on Sui requires a storage deposit paid to the Sui Storage Fund. When an empty coin or unwanted object is destroyed via verified Move calls (such as coin::destroy_zero), the blockchain immediately refunds that storage deposit (Storage Rebate) back to your wallet address as real SUI."
+      q: "What does it mean when an object is in Review?",
+      a: "Its Move package is not in the verified registry — for example a custom game item, a test token, or an unverified contract. It stays out of cleanup until you inspect it and decide."
     },
     {
-      q: "Can Sui Cleaner accidentally delete my valuable tokens or NFTs?",
-      a: "Never. Sui Cleaner uses a strict deterministic classification system. All tokens with a balance > 0 and recognized collections are marked KEEP. System-critical assets (Staked SUI, Kiosk Owner Capabilities, Treasury Caps) are classified as PROTECTED and are hard-blocked from cleanup. Only zero-balance objects and verified dust are offered for cleanup."
+      q: "What happens if a cleanup transaction fails?",
+      a: "All cleanup commands run as one atomic Programmable Transaction Block. If any command fails, the whole transaction reverts with zero state changes — your assets stay untouched."
     },
     {
-      q: "Is Sui Cleaner non-custodial? Does it need my private key or seed phrase?",
-      a: "Sui Cleaner is 100% non-custodial. It never asks for, receives, or stores your private key or seed phrase. Wallet analysis is completely read-only. All cleanup transactions are assembled into atomic Programmable Transaction Blocks (PTB) and simulated (dry-run) for your review before you sign them in your own wallet extension."
-    },
-    {
-      q: "What are the fees for using Sui Cleaner?",
-      a: "Scanning and analyzing any Sui wallet is 100% free. When you choose to execute a cleanup transaction, there is a flat service fee of 0.015 SUI sent to the public treasury, plus standard network gas. In many cases, the storage rebate you reclaim from deleting objects exceeds the network cost!"
+      q: "Is the wallet scan really free and read-only?",
+      a: "Yes. Scanning only reads public on-chain state through JSON-RPC. No signature, no gas, no fees — cleanup is the only step that costs anything."
     }
   ];
 
@@ -96,7 +95,7 @@ export default function Home() {
                   <strong>Keep what matters. Reclaim SUI.</strong>
                 </h1>
                 <p className="sc-hero-desc">
-                  Sui Cleaner analyzes your wallet&apos;s on-chain Move objects, safely destroys zero-balance coin containers, consolidates dust, and reclaims locked storage fund rebates directly to your address.
+                  Find unused and reclaimable objects in your Sui wallet, review what can be safely cleaned, and see your estimated storage recovery before you approve anything.
                 </p>
 
                 <div className="sc-hero-pills">
@@ -126,6 +125,9 @@ export default function Home() {
                   <button className="sc-primary sc-primary--large" type="button" onClick={goClean}>
                     CLEAN MY WALLET
                   </button>
+                  <Link to="/app?demo=true" className="sc-secondary">
+                    TRY DEMO
+                  </Link>
                   <button className="sc-secondary" type="button" onClick={goHow}>
                     HOW IT WORKS
                   </button>
@@ -142,17 +144,21 @@ export default function Home() {
                   <span>✓ You Approve Every Action</span>
                 </div>
 
+                <div className="sc-hero-trust" style={{ marginTop: 10 }}>
+                  <span>Scan → Classify → Review → Clean — nothing is deleted automatically, and estimates never promise a fixed return.</span>
+                </div>
+
                 <div className="sc-hero-proof">
                   <span>✓ Verified on-chain cleanup: +0.003596472 SUI rebate</span>
                   <Link to="/proof">View proof →</Link>
                 </div>
               </div>
 
-              {/* LIVE SIMULATION DASHBOARD PREVIEW */}
-              <div className="sc-sim-card" aria-label="Live Scan Simulation">
+              {/* EXAMPLE SCAN PREVIEW — static illustration, not a real wallet */}
+              <div className="sc-sim-card" aria-label="Example Scan Preview">
                 <div className="sc-sim-header">
-                  <span className="sc-sim-title">LIVE WALLET SCAN · PREVIEW</span>
-                  <span className="sc-sim-badge">SUI MAINNET</span>
+                  <span className="sc-sim-title">EXAMPLE SCAN · PREVIEW</span>
+                  <span className="sc-sim-badge">EXAMPLE</span>
                 </div>
 
                 <div className="sc-sim-stat-main">
@@ -171,7 +177,7 @@ export default function Home() {
 
                   <div className="sc-sim-item">
                     <div className="sc-sim-item-info">
-                      <span style={{ color: "var(--sc-coral)" }}>SAFE TO CLEAN</span>
+                      <span style={{ color: "var(--sc-coral)" }}>CLEANUP</span>
                       <small>Zero-Balance & Dust</small>
                     </div>
                     <div className="sc-sim-item-count" style={{ color: "var(--sc-coral)" }}>19</div>
@@ -215,6 +221,10 @@ export default function Home() {
                 >
                   CLEAN MY WALLET
                 </button>
+
+                <div style={{ marginTop: 10, fontSize: 12, color: "var(--sc-text-muted)", textAlign: "center" }}>
+                  Example figures — your scan results will differ. Actual recovery depends on the objects removed and the resulting transaction.
+                </div>
               </div>
             </div>
           </div>
@@ -293,16 +303,16 @@ export default function Home() {
           </div>
         </section>
 
-        {/* SECTION 2: THE 4 FUNCTIONAL ZONES (CAPABILITY REGISTRY) */}
-        <section className="sc-section" aria-label="Capabilities and Zones">
+        {/* SECTION 2: WHAT SUI CLEANER CAN DO WITH YOUR OBJECTS (MECHANISMS) */}
+        <section className="sc-section" aria-label="Cleanup mechanisms">
           <div className="sc-container">
             <div className="sc-section-head">
-              <div className="sc-eyebrow">UNIFIED CAPABILITY ENGINE</div>
+              <div className="sc-eyebrow">CLEANUP MECHANISMS</div>
               <h2 className="sc-section-title">
-                Four Specialized Zones for <strong>Complete Wallet Control</strong>
+                See what Sui Cleaner can <strong>do with your objects</strong>
               </h2>
               <p className="sc-section-subtitle">
-                Sui Cleaner classifies every object into four actionable zones, each backed by verified Move bytecode execution and safety checks.
+                Four verified Move execution paths. What each of your objects falls into is a separate decision — see the classification below.
               </p>
             </div>
 
@@ -455,16 +465,16 @@ export default function Home() {
           </div>
         </section>
 
-        {/* SECTION 4: CLASSIFICATION MATRIX */}
-        <section className="sc-section" aria-label="Classification Matrix">
+        {/* SECTION 4: DECISION SYSTEM — WHAT TO DO WITH EACH OBJECT */}
+        <section className="sc-section" aria-label="Classification decision system">
           <div className="sc-container">
             <div className="sc-section-head">
-              <div className="sc-eyebrow">SAFETY BY DESIGN</div>
+              <div className="sc-eyebrow">DECISION SYSTEM · SAFETY BY DESIGN</div>
               <h2 className="sc-section-title">
-                The Four <strong>Classification Categories</strong>
+                What to do with <strong>each object</strong>
               </h2>
               <p className="sc-section-subtitle">
-                Sui Cleaner enforces strict deterministic rules to ensure your valuable holdings, staking positions, and critical dApp capabilities are never put at risk.
+                Every object gets one clear recommendation — Cleanup, Review, Keep, or Protected — decided by deterministic on-chain rules. AI only explains the decision, never makes it.
               </p>
             </div>
 
@@ -505,9 +515,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* SAFE TO CLEAN */}
+              {/* CLEANUP CANDIDATES */}
               <div className="sc-cat-card sc-cat-card--cleanable">
-                <span className="sc-cat-badge sc-cat-badge--cleanable">SAFE TO CLEAN</span>
+                <span className="sc-cat-badge sc-cat-badge--cleanable">CLEANUP CANDIDATES</span>
                 <h3 className="sc-cat-title">Zero-Balance &amp; Dust</h3>
                 <p className="sc-cat-desc">
                   Empty coin objects (balance = 0), dust coins with negligible value, and confirmed spam objects with verified Move destruction paths.
@@ -517,6 +527,10 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            <p className="sc-section-subtitle" style={{ marginTop: 28, textAlign: "center" }}>
+              Candidate ≠ guaranteed safe deletion. Every cleanup is shown for review first, and nothing happens until you sign the transaction in your wallet.
+            </p>
           </div>
         </section>
 
@@ -606,7 +620,7 @@ export default function Home() {
                 Simple, Fair &amp; <strong>Transparent Fees</strong>
               </h2>
               <p className="sc-section-subtitle">
-                Read-only analysis is completely free. Cleanup carries a flat 0.015 SUI service fee, while storage rebates refund real SUI directly into your balance.
+                Read-only analysis is completely free. Cleanup carries a flat 0.015 SUI service fee, kept separate from any recovery. Estimated recovery is shown up front — actual recovery depends on the objects removed and the resulting transaction.
               </p>
             </div>
 

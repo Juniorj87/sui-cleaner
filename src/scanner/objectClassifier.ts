@@ -62,6 +62,13 @@ export interface WalletObject {
   };
   version?: string;
   digest?: string;
+  /**
+   * Honest, check-level reasons behind the classification ("Why?").
+   * Every entry describes a check that REALLY ran on real on-chain facts
+   * (owner kind, type, balance, registry hits, transfer ability...).
+   * Never invents activity, prices, or history.
+   */
+  why?: string[];
 }
 
 export interface OnchainFacts {
@@ -123,6 +130,18 @@ export function classifyDemo(raw: RawObject): WalletObject {
   const isEmptyCoin = raw.kind === "TOKEN" && raw.coinBalance === "0";
   const cleanupAction = raw.cleanable ? (isEmptyCoin ? "delete" : DEMO_ACTION[raw.kind]) : undefined;
 
+  // Demo "why" — mirrors the demo fixture facts only (status / cleanable /
+  // note). Demo data is explicitly fictional; these bullets never claim
+  // on-chain activity.
+  const why: string[] = [];
+  if (raw.status === "PROTECTED") why.push("demo fixture: marked PROTECTED (locked, never cleaned)");
+  if (raw.status === "VALUABLE" || raw.status === "TRUSTED") why.push("demo fixture: marked valuable/trusted collection");
+  if (raw.status === "SUSPICIOUS") why.push("demo fixture: marked unsolicited / suspicious airdrop pattern");
+  if (raw.status === "UNKNOWN" && !raw.cleanable) why.push("demo fixture: unknown collection, no verified cleanup method");
+  if (isEmptyCoin) why.push("zero balance in fixture — empty coin object (destroy_zero applies)");
+  if (cleanupAction) why.push(`demo cleanup verified: ${cleanupAction}`);
+  else if (raw.status !== "PROTECTED") why.push("no verified cleanup method in this demo fixture");
+
   return {
     objectId: raw.id,
     type: `${raw.package}::demo::${raw.kind}`,
@@ -142,6 +161,7 @@ export function classifyDemo(raw: RawObject): WalletObject {
     tone: raw.status === "VALUABLE" ? "bright" : "stable",
     cursed: raw.cursed,
     coinBalance: isEmptyCoin ? "0" : undefined,
+    why,
   };
 }
 
@@ -168,6 +188,11 @@ export function classifyReal(
     facts.ownerKind !== "address";
 
   if (protected_) {
+    const why: string[] = [];
+    if (facts.ownerKind !== "address") why.push(`owner is ${facts.ownerKind} (not address-owned) — cannot be safely removed`);
+    if (isProtectedType(facts.type)) why.push("type matches the system-protected list (capability / staking / kiosk …)");
+    if (isProtectedSingleton(facts.objectId)) why.push("object id is a protected singleton");
+    if (why.length === 0) why.push("protected by ownership / type rules");
     return {
       objectId: facts.objectId,
       type: facts.type,
@@ -181,6 +206,7 @@ export function classifyReal(
       name: facts.name ?? humanizeTypeName(facts.type),
       collection: facts.collection ?? "Unknown",
       package: facts.packageId,
+      why,
     };
   }
 
@@ -208,6 +234,13 @@ export function classifyReal(
     const iconUrl = preset?.iconUrl || meta?.iconUrl;
     const formattedBalance = formatCoinBalance(facts.coinBalance, decimals);
 
+    const coinWhyBase: string[] = [
+      `on-chain balance is ${facts.coinBalance ?? "0"} base units (${formattedBalance} ${symbol})`,
+    ];
+    if (proj || preset || meta) coinWhyBase.push(`recognized token identity: ${tokenName} (${symbol})`);
+    else coinWhyBase.push("token identity not in the verified registry");
+    if (spam) coinWhyBase.push("package flagged in the spam registry");
+
     const base: WalletObject = {
       objectId: facts.objectId,
       type: facts.type,
@@ -224,6 +257,7 @@ export function classifyReal(
       coinBalance: facts.coinBalance,
       collection: proj?.issuer || meta?.description || "Coin",
       package: facts.packageId,
+      why: [...coinWhyBase],
     };
 
     // sCoins (Scallop Coin<MarketCoin<T>>) and sSUI (SpringSui
@@ -240,6 +274,7 @@ export function classifyReal(
           cleanupAction: "withdraw",
           reason: defiCoin.reason,
           position: { coinTypeA: defiCoin.coinType, coinTypeB: undefined },
+          why: [...coinWhyBase, "DeFi receipt with a verified redeem entry point (withdraw, balance preserved)"],
         },
         spam
       );
@@ -254,6 +289,7 @@ export function classifyReal(
           classification: "cleanable",
           cleanupAction: "delete",
           reason: `Empty spent coin object (${symbol}) with zero balance. Reclaim +0.0028 SUI storage rebate by destroying this object via coin::destroy_zero().`,
+          why: [...coinWhyBase, "zero balance — empty coin object, verified cleanup via coin::destroy_zero"],
         },
         spam
       );
@@ -269,13 +305,14 @@ export function classifyReal(
           dust: true,
           reason:
             `Micro-token dust balance (${formattedBalance} ${symbol}). Will be consolidated — the balance stays in your wallet, only empty containers are destroyed for rebates.`,
+          why: [...coinWhyBase, "micro-balance below the dust threshold — merged, never burned (balance stays in wallet)"],
         },
         spam
       );
     }
     if (isKnownCoin(facts) || proj || preset) {
       return spamOverride(
-        { ...base, tone: "bright", reason: `Verified token (${symbol}) with balance (${formattedBalance} ${symbol}). Value is never destroyed. Keep.` },
+        { ...base, tone: "bright", reason: `Verified token (${symbol}) with balance (${formattedBalance} ${symbol}). Value is never destroyed. Keep.`, why: [...coinWhyBase, "known token with a real balance — value is never destroyed, keep"] },
         spam
       );
     }
@@ -288,6 +325,7 @@ export function classifyReal(
         protected: false,
         reason:
           `We could not fully verify this token (${symbol}). Its balance (${formattedBalance} ${symbol}) is safe — nothing will be touched without review.`,
+        why: [...coinWhyBase, "unknown token with a meaningful balance — kept safe, needs review before any action"],
       },
       spam
     );
@@ -314,6 +352,7 @@ export function classifyReal(
             collection: facts.collection ?? protocol.name,
             package: facts.packageId,
             position: position.position,
+            why: [`known protocol: ${protocol.name}`, "DeFi position with a verified withdraw entry point", ...(spam ? ["package flagged in the spam registry"] : [])],
           },
           spam
         );
@@ -330,6 +369,7 @@ export function classifyReal(
           collection: facts.collection ?? protocol.name,
           package: facts.packageId,
           position: position.position,
+          why: [`known protocol: ${protocol.name}`, "DeFi position without a verified withdraw — review before any action", ...(spam ? ["package flagged in the spam registry"] : [])],
         },
         spam
       );
@@ -366,6 +406,12 @@ export function classifyReal(
           name: facts.name ?? humanizeTypeName(facts.type),
           collection: facts.collection ?? "Unknown",
           package: facts.packageId,
+          why: [
+            "unknown collection / unverified package",
+            "transfer ability confirmed on-chain (has store) — verified removal via transfer-to-0x0",
+            "burn returns no storage rebate",
+            ...(spam ? ["package flagged in the spam registry"] : []),
+          ],
         },
         spam
       );
@@ -383,6 +429,13 @@ export function classifyReal(
         name: facts.name ?? humanizeTypeName(facts.type),
         collection: facts.collection ?? "Unknown",
         package: facts.packageId,
+        why: [
+          "unknown collection / unverified package",
+          facts.hasStore === false
+            ? "no transfer ability on-chain — no verified cleanup method"
+            : "transfer ability unknown — no verified cleanup method",
+          ...(spam ? ["package flagged in the spam registry"] : []),
+        ],
       },
       spam
     );
@@ -397,6 +450,11 @@ export function classifyReal(
       classification: "review",
       protected: false,
       reason: "Unknown package. No verified collection. Cleanup capability not verified.",
+      why: [
+        "unknown package — no verified collection or protocol",
+        "cleanup capability not verified",
+        ...(spam ? ["package flagged in the spam registry"] : []),
+      ],
       name: facts.name ?? humanizeTypeName(facts.type),
       collection: facts.collection ?? "Unknown",
       package: facts.packageId,
@@ -551,13 +609,21 @@ function defiPositionInfo(
  */
 function spamOverride(o: WalletObject, spam: boolean): WalletObject {
   if (!spam || o.protected) return o;
-  if (o.cleanupAction) return { ...o, cursed: true };
+  const why = [...(o.why ?? [])];
+  if (!why.some((w) => w.includes("spam registry"))) why.push("package flagged in the spam registry");
+  if (o.cleanupAction) {
+    if (!why.some((w) => w.includes("verified removal") || w.includes("destroy_zero") || w.includes("redeem") || w.includes("withdraw"))) {
+      why.push("verified removal method exists — stays cleanable, flagged for review");
+    }
+    return { ...o, cursed: true, why };
+  }
   return {
     ...o,
     classification: "suspicious",
     cleanupAction: undefined,
     cursed: true,
     reason: "Package flagged in the spam registry. Review carefully — nothing will be touched.",
+    why: [...why, "no verified removal method — needs manual review, nothing will be touched"],
   };
 }
 
@@ -592,6 +658,7 @@ function keepObject(facts: OnchainFacts, via: string): WalletObject {
     name: facts.name ?? humanizeTypeName(facts.type),
     collection: facts.collection ?? "Unknown",
     package: facts.packageId,
+    why: [`verified identity: ${via}`, "no cleanup action — value stays untouched"],
   };
 }
 
@@ -698,4 +765,134 @@ export function aggregateStats(objects: WalletObject[]): ScanStats {
 export function walletCondition(stats: ScanStats): number {
   const raw = 100 - (stats.suspicious * 2 + stats.review + Math.floor(stats.cleanable / 6));
   return Math.max(25, Math.min(99, raw));
+}
+
+/* --------------------------- wallet health (UX) --------------------------- */
+/**
+ * Product-facing health taxonomy (SCAN → EXPLAIN → CLEAN):
+ *   Spam       — explicit unsolicited/spam with a VERIFIED removal method
+ *                (spam-registry hit that stayed cleanable, or demo
+ *                suspicious-with-action). Safe cleanup candidate.
+ *   Suspicious — spam-registry hit WITHOUT a verified removal method.
+ *                Needs manual review, never auto-selected.
+ *   Dust       — micro-balance coin (merged, balance preserved).
+ *   Valuable   — verified asset with real-value signals (tone=bright).
+ *   Locked     — protected / non-address-owned. Never cleaned.
+ *   Unknown    — insufficient data (review, no verified cleanup).
+ *                Unknown !== Spam: never recommended for removal.
+ *   Safe       — other verified-removable objects (empty coins, burnable
+ *                junk with transfer ability). Safe cleanup candidate.
+ *
+ * Buckets are EXCLUSIVE (priority: Locked > Spam > Suspicious > Dust >
+ * Valuable > Unknown > Safe > Keep-other) so the breakdown always sums to
+ * Total. Everything is derived from real scan flags — no fake data.
+ */
+export type HealthBucket = "spam" | "suspicious" | "dust" | "valuable" | "locked" | "unknown" | "safe" | "other";
+
+export function healthBucketOf(o: WalletObject): HealthBucket {
+  if (o.protected || o.classification === "protected") return "locked";
+  const isSpamRemovable =
+    (!!o.cursed && !!o.cleanupAction) ||
+    (o.classification === "suspicious" && !!o.cleanupAction);
+  if (isSpamRemovable) return "spam";
+  if (o.classification === "suspicious") return "suspicious";
+  if (!!o.dust) return "dust";
+  if (o.tone === "bright") return "valuable";
+  if (o.classification === "review") return "unknown";
+  if (!!o.cleanupAction) return "safe";
+  return "other";
+}
+
+export interface WalletHealth {
+  total: number;
+  spam: number;
+  suspicious: number;
+  dust: number;
+  valuable: number;
+  locked: number;
+  unknown: number;
+  /** other verified-removable (empty coins, burnable junk) — safe candidates */
+  safe: number;
+  /** objects the app may auto-select (spam + dust + safe with a verified action) */
+  autoCleanable: number;
+  /** health score 0..100 — same deterministic walletCondition, never faked */
+  score: number;
+}
+
+export function deriveWalletHealth(objects: WalletObject[]): WalletHealth {
+  const h: WalletHealth = {
+    total: objects.length,
+    spam: 0,
+    suspicious: 0,
+    dust: 0,
+    valuable: 0,
+    locked: 0,
+    unknown: 0,
+    safe: 0,
+    autoCleanable: 0,
+    score: 100,
+  };
+  if (objects.length === 0) return h;
+  let other = 0;
+  for (const o of objects) {
+    switch (healthBucketOf(o)) {
+      case "spam": h.spam += 1; break;
+      case "suspicious": h.suspicious += 1; break;
+      case "dust": h.dust += 1; break;
+      case "valuable": h.valuable += 1; break;
+      case "locked": h.locked += 1; break;
+      case "unknown": h.unknown += 1; break;
+      case "safe": h.safe += 1; break;
+      default: other += 1; break;
+    }
+  }
+  // Auto-selectable = verified action on spam/dust/safe buckets only.
+  // Valuable / Locked / Unknown / Suspicious / Other are NEVER auto-selected.
+  h.autoCleanable = h.spam + h.dust + h.safe;
+  h.score = walletCondition(aggregateStats(objects));
+  void other;
+  return h;
+}
+
+/* --------------------- action-oriented groups (UX) ------------------------ */
+/**
+ * Decision-system view over the deterministic classification: answers "what
+ * should I do with this object?" instead of "what type is it?".
+ *
+ * Grouping is classification-first so the banner ALWAYS agrees with the
+ * object table and with what can actually be selected:
+ *   CLEANUP   — classification "cleanable" with a verified action
+ *               (exactly the set the table's Cleanup tab shows and SELECT ALL
+ *               CLEANABLE acts on; a candidate is never a guaranteed safe
+ *               deletion: always review + sign)
+ *   REVIEW    — classification "review" or "suspicious" (needs the user's
+ *               eyes first — including spam-flagged objects that carry a
+ *               removal action but must be inspected before quarantine & burn)
+ *   KEEP      — classification "keep" (active / important, recommended to keep)
+ *   PROTECTED — locked (cannot be cleaned by the current cleanup flow)
+ * Pure presentation over deterministic data — no new rules, no LLM.
+ */
+export interface ActionGroups {
+  total: number;
+  cleanup: number;
+  review: number;
+  keep: number;
+  protectedCount: number;
+  /** empty (zero-balance) + dust coins — the low-value subset of cleanup */
+  emptyOrDust: number;
+}
+
+export function deriveActionGroups(objects: WalletObject[]): ActionGroups {
+  const g: ActionGroups = { total: objects.length, cleanup: 0, review: 0, keep: 0, protectedCount: 0, emptyOrDust: 0 };
+  for (const o of objects) {
+    if (o.protected || o.classification === "protected") g.protectedCount += 1;
+    else if (o.classification === "suspicious" || o.classification === "review") g.review += 1;
+    else if (o.classification === "cleanable" && !!o.cleanupAction) g.cleanup += 1;
+    else if (o.classification === "keep") g.keep += 1;
+    // Anything unrecognized (e.g. cleanable without an action — should not
+    // happen) lands in REVIEW: never claim cleanable without a real action.
+    else g.review += 1;
+    if (!!o.dust || o.coinBalance === "0") g.emptyOrDust += 1;
+  }
+  return g;
 }

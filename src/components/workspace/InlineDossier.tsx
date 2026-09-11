@@ -243,12 +243,12 @@ export default function InlineDossier({
                   ? "PROTECTED"
                   : st === "cleanable"
                   ? empty
-                    ? "SAFE TO REMOVE (ESTIMATED REBATE)"
+                    ? "CLEANUP CANDIDATE (ESTIMATED REBATE)"
                     : isSuspicious
                     ? "SUSPICIOUS / SPAM"
                     : object.category === "nft"
-                    ? "SAFE TO BURN (NO REBATE)"
-                    : "SAFE TO CLEAN"
+                    ? "CLEANUP CANDIDATE (NO REBATE)"
+                    : "CLEANUP CANDIDATE"
                   : "NEEDS REVIEW"}
               </span>
             </div>
@@ -308,6 +308,25 @@ export default function InlineDossier({
             <p className="dossier-section-text">{explanation.whatCanIDo}</p>
           </div>
         </div>
+
+        {/* WHY? — only checks that really ran on real on-chain facts. Never
+            invents activity, prices, or history. Unknown stays Unknown. */}
+        {object.why && object.why.length > 0 && (
+          <div className="dossier-section-card" data-testid="why-panel">
+            <div className="dossier-section-head">
+              <Search size={14} strokeWidth={2} className="dossier-section-icon" />
+              <span className="dossier-section-title">WHY? — CHECKS THAT RAN</span>
+            </div>
+            <ul className="why-list">
+              {object.why.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+            <p className="why-note">
+              Decided by deterministic on-chain rules — AI can explain, never decides.
+            </p>
+          </div>
+        )}
 
         {/* AI Assistant Callout */}
         {aiKey && onOpenAI && (

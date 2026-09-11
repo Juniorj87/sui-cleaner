@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ShieldCheck, HelpCircle, Sparkles, Diamond, Layers, X, ArrowLeft } from "lucide-react";
 import type { WalletObject } from "../scanner/objectClassifier";
+import { healthBucketOf } from "../scanner/objectClassifier";
 import TokenCard from "./TokenCard";
 import { coinInnerType, isEmptyCoinObject, type GroupStatus } from "../lib/walletGroups";
 
@@ -207,11 +208,25 @@ export default function CleanupScreen({
     );
   };
 
+  // Cleanup Summary — real category counts from the actual selection.
+  // No estimates invented: gas/rebate rows below stay dry-run-gated.
+  const summary = useMemo(() => {
+    let spam = 0, dust = 0, empty = 0, safe = 0;
+    for (const o of items) {
+      const b = healthBucketOf(o);
+      if (b === "spam") spam += 1;
+      else if (b === "dust") dust += 1;
+      else if (isEmptyCoinObject(o)) empty += 1;
+      else safe += 1;
+    }
+    return { spam, dust, empty, safe };
+  }, [items]);
+
   return (
     <div className="cleanup" data-cleanup="ready">
-      <p className="report-eyebrow">Your cleanup</p>
+      <p className="report-eyebrow">Cleanup Summary</p>
       <h2 className="report-title">
-        Your cleanup is <span className="highlight">ready.</span>
+        {remove} object{remove === 1 ? "" : "s"} can be <span className="highlight">cleaned.</span>
       </h2>
 
       <div className="cleanup-hero">
@@ -222,6 +237,27 @@ export default function CleanupScreen({
           {dustNote && <span className="cleanup-kinds dust-note">{dustNote}</span>}
         </div>
       </div>
+
+      {remove > 0 && (
+        <div className="cleanup-summary-grid" data-testid="cleanup-summary">
+          <div className="cleanup-summary-box">
+            <div className="cleanup-summary-num">{summary.spam}</div>
+            <div className="cleanup-summary-lbl">SPAM</div>
+          </div>
+          <div className="cleanup-summary-box">
+            <div className="cleanup-summary-num">{summary.dust}</div>
+            <div className="cleanup-summary-lbl">DUST</div>
+          </div>
+          <div className="cleanup-summary-box">
+            <div className="cleanup-summary-num">{summary.empty}</div>
+            <div className="cleanup-summary-lbl">EMPTY</div>
+          </div>
+          <div className="cleanup-summary-box">
+            <div className="cleanup-summary-num">{summary.safe}</div>
+            <div className="cleanup-summary-lbl">OTHER SAFE</div>
+          </div>
+        </div>
+      )}
 
       {/* plain-language notes — empty coin objects and dust merging */}
       {emptyCount > 0 && (

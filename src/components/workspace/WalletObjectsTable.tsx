@@ -1,19 +1,27 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Search, X, Inbox, Check, MoreVertical, ChevronLeft, ChevronRight, Wallet, Sparkles, Lock } from "lucide-react";
 import type { WalletObject } from "../../scanner/objectClassifier";
 import { coinInnerType } from "../../lib/walletGroups";
 import { extractCoinSymbol, fixIpfsUrl } from "../../lib/tokenMetadata";
 
-/** object list filter — every category the product logic actually supports */
+/** banner action boxes jump to a table filter through this event (existing mechanism, no new system) */
+export const OBJECT_FILTER_EVENT = "sui-cleaner:filter-objects";
+
+/** decision axis — what to DO with the object (drives banner + presets) */
 export type ObjectFilter =
   | "all"
   | "cleanable"
+  | "review"
+  | "keep"
+  | "protected";
+
+/** object-type axis — what the object IS (view-only refinement, combines with decision) */
+export type TypeFilter =
+  | "all-types"
   | "tokens"
   | "nfts"
   | "defi"
-  | "dust"
-  | "review"
-  | "protected";
+  | "dust";
 
 interface WalletObjectsTableProps {
   objects: WalletObject[];
@@ -158,18 +166,41 @@ export default function WalletObjectsTable({
   address,
 }: WalletObjectsTableProps) {
   const [filter, setFilter] = useState<ObjectFilter>(activeFilter);
+  // Type axis is pure view state: it REFINES the decision filter (AND),
+  // never replaces it — Decision → Cleanup + Type → NFTs shows exactly the
+  // NFTs the classifier marked as cleanup candidates. A decision change
+  // resets the type refinement so counts stay predictable.
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all-types");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 40;
 
   const currentFilter = onFilterChange ? activeFilter : filter;
-  const handleFilterSelect = (tab: ObjectFilter) => {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const handleFilterSelect = useCallback((tab: ObjectFilter) => {
     if (onFilterChange) onFilterChange(tab);
     else setFilter(tab);
+    setTypeFilter("all-types");
     setPage(1);
-  };
+  }, [onFilterChange]);
+  const handleTypeSelect = useCallback((tab: TypeFilter) => {
+    setTypeFilter((prev) => (prev === tab ? "all-types" : tab));
+    setPage(1);
+  }, []);
 
-  // Per-category counts — every tab the product logic supports
+  // Banner action boxes (CLEANUP / REVIEW / KEEP / PROTECTED) jump here.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const f = (e as CustomEvent).detail as ObjectFilter | undefined;
+      if (!f) return;
+      handleFilterSelect(f);
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    window.addEventListener(OBJECT_FILTER_EVENT, handler);
+    return () => window.removeEventListener(OBJECT_FILTER_EVENT, handler);
+  }, [handleFilterSelect]);
+
+  // Per-category counts — every tab the product logic actually supports
   const counts = useMemo(() => {
     const total = objects.length;
     const cleanable = objects.filter((o) => isSelectable(o)).length;
@@ -178,32 +209,39 @@ export default function WalletObjectsTable({
     const defi = objects.filter((o) => !!o.position).length;
     const dust = objects.filter((o) => !!o.dust && !o.protected).length;
     const review = objects.filter((o) => o.classification === "review" || o.classification === "suspicious").length;
+    const keep = objects.filter((o) => o.classification === "keep").length;
     const protectedCount = objects.filter((o) => o.protected).length;
-    return { total, cleanable, tokens, nfts, defi, dust, review, protectedCount };
+    return { total, cleanable, tokens, nfts, defi, dust, review, keep, protectedCount };
   }, [objects]);
 
-  // Segmented tabs — status tabs always shown, category tabs only when present
-  const tabs: Array<{ key: ObjectFilter; label: string; count: number; cls?: string }> = [
-    { key: "all" as const, label: "All", count: counts.total },
-    { key: "cleanable" as const, label: "Cleanable", count: counts.cleanable, cls: "cleanable" },
-    { key: "tokens" as const, label: "Tokens", count: counts.tokens, cls: "tokens" },
-    { key: "nfts" as const, label: "NFTs", count: counts.nfts, cls: "nfts" },
-    { key: "defi" as const, label: "DeFi", count: counts.defi, cls: "defi" },
-    { key: "dust" as const, label: "Dust / Zero", count: counts.dust, cls: "dust" },
-    { key: "review" as const, label: "Review", count: counts.review, cls: "review" },
-    { key: "protected" as const, label: "Protected", count: counts.protectedCount, cls: "protected" },
-  ].filter((t) => t.key === "all" || t.key === "cleanable" || t.key === "review" || t.key === "protected" || t.count > 0);
+  // Two axes, never mixed: DECISION (what to do) + OBJECT TYPE (what it is).
+  // Same filters as before plus Keep — presentation grouping only.
+  const decisionTabs: Array<{ key: ObjectFilter; label: string; count: number; cls?: string; title: string }> = [
+    { key: "all" as const, label: "All", count: counts.total, title: "All detected objects" },
+    { key: "cleanable" as const, label: "Cleanup", count: counts.cleanable, cls: "cleanable", title: "Cleanup candidates — review before signing" },
+    { key: "review" as const, label: "Review", count: counts.review, cls: "review", title: "Needs your review before any action" },
+    { key: "keep" as const, label: "Keep", count: counts.keep, title: "Active or important — recommended to keep" },
+    { key: "protected" as const, label: "Protected", count: counts.protectedCount, cls: "protected", title: "Cannot be cleaned by the current flow" },
+  ];
+  const typeTabs: Array<{ key: TypeFilter; label: string; count: number; cls?: string; title: string }> = [
+    { key: "tokens" as const, label: "Tokens", count: counts.tokens, cls: "tokens", title: "Refine: coin objects only" },
+    { key: "nfts" as const, label: "NFTs", count: counts.nfts, cls: "nfts", title: "Refine: NFTs only" },
+    { key: "defi" as const, label: "DeFi", count: counts.defi, cls: "defi", title: "Refine: DeFi positions only" },
+    { key: "dust" as const, label: "Dust / Zero", count: counts.dust, cls: "dust", title: "Refine: micro-balance coins only" },
+  ].filter((t) => t.count > 0);
 
-  // Filtered list
+  // Filtered list — decision AND type (both must match)
   const filteredList = useMemo(() => {
     let list = objects;
     if (currentFilter === "cleanable") list = list.filter((o) => isSelectable(o));
-    else if (currentFilter === "tokens") list = list.filter((o) => o.category === "coin" && !o.dust && o.coinBalance !== "0");
-    else if (currentFilter === "nfts") list = list.filter((o) => o.category === "nft");
-    else if (currentFilter === "defi") list = list.filter((o) => !!o.position);
-    else if (currentFilter === "dust") list = list.filter((o) => !!o.dust && !o.protected);
     else if (currentFilter === "review") list = list.filter((o) => o.classification === "review" || o.classification === "suspicious");
+    else if (currentFilter === "keep") list = list.filter((o) => o.classification === "keep");
     else if (currentFilter === "protected") list = list.filter((o) => o.protected);
+
+    if (typeFilter === "tokens") list = list.filter((o) => o.category === "coin" && !o.dust && o.coinBalance !== "0");
+    else if (typeFilter === "nfts") list = list.filter((o) => o.category === "nft");
+    else if (typeFilter === "defi") list = list.filter((o) => !!o.position);
+    else if (typeFilter === "dust") list = list.filter((o) => !!o.dust && !o.protected);
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -217,7 +255,7 @@ export default function WalletObjectsTable({
       });
     }
     return list;
-  }, [objects, currentFilter, search]);
+  }, [objects, currentFilter, typeFilter, search]);
 
   // Every object eligible for cleanup right now (across all tabs) — the set
   // SELECT ALL acts on. Protected / review / keep objects are never included.
@@ -253,8 +291,39 @@ export default function WalletObjectsTable({
     return filteredList.slice(start, start + pageSize);
   }, [filteredList, currentPage, pageSize]);
 
+  const renderTab = (t: { key: ObjectFilter; label: string; count: number; cls?: string; title: string }) => (
+    <button
+      key={t.key}
+      type="button"
+      role="tab"
+      aria-selected={currentFilter === t.key}
+      className={`tbl-tab-pill ${currentFilter === t.key ? "active" : ""}`}
+      onClick={() => handleFilterSelect(t.key)}
+      title={t.title}
+    >
+      <span>{t.label}</span>
+      <span className={`pill-badge ${t.cls ?? ""}`}>{t.count}</span>
+    </button>
+  );
+
+  // Type tabs REFINE the decision (click again to clear the refinement).
+  const renderTypeTab = (t: { key: TypeFilter; label: string; count: number; cls?: string; title: string }) => (
+    <button
+      key={t.key}
+      type="button"
+      role="tab"
+      aria-selected={typeFilter === t.key}
+      className={`tbl-tab-pill tbl-tab-type ${typeFilter === t.key ? "active" : ""}`}
+      onClick={() => handleTypeSelect(t.key)}
+      title={`${t.title} — combines with the Decision filter`}
+    >
+      <span>{t.label}</span>
+      <span className={`pill-badge ${t.cls ?? ""}`}>{t.count}</span>
+    </button>
+  );
+
   return (
-    <section className="wallet-objects-card" aria-label="Wallet objects">
+    <section ref={sectionRef} className="wallet-objects-card" aria-label="Wallet objects">
       {/* Header: title + bulk actions */}
       <div className="tbl-header-top">
         <div className="tbl-title-group">
@@ -290,22 +359,19 @@ export default function WalletObjectsTable({
         </div>
       </div>
 
-      {/* Toolbar: filter tabs + search */}
+      {/* Toolbar: decision tabs + type refinements + search.
+          Two axes that COMBINE (AND): Decision picks what to do,
+          Type narrows it to what the object is. */}
       <div className="tbl-toolbar-row">
         <div className="tbl-filter-tabs" role="tablist" aria-label="Filter objects">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={currentFilter === t.key}
-              className={`tbl-tab-pill ${currentFilter === t.key ? "active" : ""}`}
-              onClick={() => handleFilterSelect(t.key)}
-            >
-              <span>{t.label}</span>
-              <span className={`pill-badge ${t.cls ?? ""}`}>{t.count}</span>
-            </button>
-          ))}
+          <span className="tbl-filter-group-lbl" aria-hidden="true">Decision</span>
+          {decisionTabs.map(renderTab)}
+          {typeTabs.length > 0 && (
+            <>
+              <span className="tbl-filter-group-lbl" aria-hidden="true">Type</span>
+              {typeTabs.map(renderTypeTab)}
+            </>
+          )}
         </div>
 
         <div className="tbl-search-controls">
@@ -340,7 +406,7 @@ export default function WalletObjectsTable({
       </div>
 
       {/* NFT status legend — why a row can or cannot be selected */}
-      {currentFilter === "nfts" && (
+      {typeFilter === "nfts" && (
         <div className="tbl-nft-legend" data-testid="nft-legend">
           <span className="nft-legend-item nft-keep">
             <span className="nft-legend-dot" />
@@ -553,7 +619,17 @@ export default function WalletObjectsTable({
 
                     {/* STATUS */}
                     <td className="col-status">
-                      <span className={`status-badge ${sm.cls}`}>{sm.label}</span>
+                      <span className={`status-badge ${sm.cls}`} title={o.reason}>{sm.label}</span>
+                      {(o.classification === "suspicious" || !!o.cursed) && (
+                        <button
+                          type="button"
+                          className="tbl-why-btn"
+                          onClick={(e) => { e.stopPropagation(); onInspect(o); }}
+                          title="See which checks flagged this object"
+                        >
+                          Why?
+                        </button>
+                      )}
                     </td>
 
                     {/* RECLAIMABLE */}

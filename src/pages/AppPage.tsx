@@ -27,6 +27,8 @@ import FinalReviewScreen from "../components/FinalReviewScreen";
 import SignScreen, { type SignBlocker } from "../components/SignScreen";
 import SuccessScreen from "../components/SuccessScreen";
 import AppHome from "../components/batch/AppHome";
+import CleanupHistory from "../components/workspace/CleanupHistory";
+import { loadCleanupHistory, recordCleanup, type CleanupRecord } from "../cleanup/history";
 import BatchInput from "../components/batch/BatchInput";
 import BatchProgress from "../components/batch/BatchProgress";
 import BatchResults from "../components/batch/BatchResults";
@@ -133,6 +135,10 @@ export default function AppPage() {
   const [batchDraft, setBatchDraft] = useState<{ text: string; upload: Array<{ address: string; label?: string }> }>({ text: "", upload: [] });
   const [batchProgress, setBatchProgress] = useState<BatchProgressState>({ total: 0, done: 0, ok: 0, failed: 0, remaining: 0 });
   const [batchResults, setBatchResults] = useState<BatchWalletResult[] | null>(null);
+  /** local cleanup history (localStorage only, never seeded, never faked) */
+  const [history, setHistory] = useState<CleanupRecord[]>(() => loadCleanupHistory());
+  /** ms epoch of the last completed scan — drives "Last scan" + monitor rescan */
+  const [lastScannedAt, setLastScannedAt] = useState<number | null>(null);
   const batchCancelledRef = useRef(false);
   /** in-memory scan cache by normalized address (OPEN without re-scan) */
   const sessionCache = useRef(new Map<string, ScanResult>());
@@ -346,6 +352,7 @@ export default function AppPage() {
     if (demoTimer.current !== null) window.clearTimeout(demoTimer.current);
     demoTimer.current = window.setTimeout(() => {
       if (token !== scanToken.current) return;
+      setLastScannedAt(Date.now());
       flow.go("report");
       demoTimer.current = null;
     }, 1500);
@@ -406,6 +413,7 @@ export default function AppPage() {
         if (token !== scanToken.current) return;
         setScan(r);
         recordSession(address, r);
+        setLastScannedAt(Date.now());
         flow.go("report");
       })
       .catch((e: unknown) => {
@@ -439,6 +447,7 @@ export default function AppPage() {
         if (token !== scanToken.current) return;
         setScan(r);
         recordSession(account.address, r);
+        setLastScannedAt(Date.now());
         flow.go("report");
       })
       .catch((e: unknown) => {
@@ -513,6 +522,7 @@ export default function AppPage() {
     sessionCache.current.set(norm.toLowerCase(), scan);
     setRecents(addRecent(buildRecent(norm, scan)));
     setScan(scan);
+    setLastScannedAt(Date.now());
     flow.go("report");
   };
 
@@ -699,15 +709,27 @@ export default function AppPage() {
 
     if (mode === "demo") {
       setCleaned(true);
+      const demoRemoved = objects.filter((o) => flow.selected.has(o.objectId)).map((o) => o.objectId);
       setTxResult({
         digest: "0x0000000000000000000000000000000000000000000000000000000000000000",
-        requestedIds: objects.filter((o) => flow.selected.has(o.objectId)).map((o) => o.objectId),
-        removedIds: objects.filter((o) => flow.selected.has(o.objectId)).map((o) => o.objectId),
+        requestedIds: demoRemoved,
+        removedIds: demoRemoved,
         remainingIds: objects.filter((o) => !flow.selected.has(o.objectId)).map((o) => o.objectId),
         unexpectedChanges: [],
         status: "success",
         before: objects.length,
         after: objects.length - flow.selectedCount,
+      });
+      // Local demo history entry — explicitly labeled demo, never a real tx.
+      setHistory((prev) => {
+        void prev;
+        return recordCleanup({
+          date: Date.now(),
+          address: scannedAddress ?? "demo",
+          objectsCleaned: demoRemoved.length,
+          digest: "0x0000000000000000000000000000000000000000000000000000000000000000",
+          demo: true,
+        });
       });
       flow.go("success");
       return;
@@ -935,6 +957,20 @@ export default function AppPage() {
         result.treasuryReceivedMist != null ? mistToSui(result.treasuryReceivedMist) : undefined,
       effectsStatus: result.effectsStatus,
     });
+    // Local history — actual on-chain result only (digest, deleted count,
+    // effects rebate/net). No estimates, no fake entries.
+    setHistory((prev) => {
+      void prev;
+      return recordCleanup({
+        date: Date.now(),
+        address: scannedAddress ?? account!.address,
+        objectsCleaned: result.deletedIds.length,
+        digest: result.digest,
+        storageRebateSui,
+        netResultSui,
+        demo: false,
+      });
+    });
     flow.go("success");
   };
 
@@ -1063,7 +1099,7 @@ export default function AppPage() {
   switch (flow.screen) {
     case "home":
       center = (
-        <div className="ws-screen-center">
+        <div className="ws-screen-center" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <AppHome
             connectedAddress={account?.address ?? null}
             onConnect={connect}
@@ -1076,6 +1112,7 @@ export default function AppPage() {
             onRescanRecent={(rec) => startReadonly(rec.address)}
             focusInputSignal={focusInputSignal}
           />
+          <CleanupHistory records={history} />
         </div>
       );
       break;
@@ -1357,7 +1394,7 @@ export default function AppPage() {
 
     case "success":
       center = txResult ? (
-        <div className="ws-screen-center">
+        <div className="ws-screen-center" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <SuccessScreen
             before={txResult.before}
             after={txResult.after}
@@ -1375,6 +1412,7 @@ export default function AppPage() {
             onExplore={() => flow.go("report")}
             onScanAgain={mode === "demo" ? startDemo : resetApp}
           />
+          <CleanupHistory records={history} />
         </div>
       ) : null;
       break;
@@ -1415,7 +1453,17 @@ export default function AppPage() {
           objects={objects}
           focusObject={aiFocusObject}
           onClose={() => { setShowAIAssistant(false); setAiFocusObject(null); }}
-          onSelectForCleanup={(id) => { flow.reviewDecide(id, true); setShowAIAssistant(false); setAiFocusObject(null); }}
+          // AI single-add mirrors the dossier rule exactly: only objects with
+          // a verified cleanup action and never protected. Keep / review
+          // without action / protected are ignored here (as in the dossier),
+          // and the validator + builder gate everything again downstream.
+          onSelectForCleanup={(id) => {
+            const o = objects.find((x) => x.objectId === id);
+            if (!o || !o.cleanupAction || o.protected) return;
+            flow.reviewDecide(id, true);
+            setShowAIAssistant(false);
+            setAiFocusObject(null);
+          }}
           onKeep={(id) => { flow.reviewDecide(id, false); setShowAIAssistant(false); setAiFocusObject(null); }}
           // AI-driven pre-selection into the EXISTING review flow: the user
           // still reviews, confirms and signs exactly as without AI.
@@ -1441,6 +1489,8 @@ export default function AppPage() {
               onConnect={connect}
               onDemo={startDemo}
               onScanAddress={startReadonly}
+              onRescan={handleScan}
+              lastScannedAt={lastScannedAt}
             />
           )}
 
